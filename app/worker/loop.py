@@ -4,6 +4,7 @@ import signal
 import threading
 from types import FrameType
 
+import psycopg
 from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session, sessionmaker
 
@@ -13,6 +14,7 @@ from app.services import queue
 from app.worker.credentials import CredentialResolver, DevFileResolver, UnconfiguredResolver
 from app.worker.executor import Executor
 from app.worker.git import RepoCache
+from app.worker.locking import PgTemplateLocker
 
 log = logging.getLogger(__name__)
 
@@ -55,6 +57,7 @@ def run_worker(settings: Settings) -> int:
     sm = get_sessionmaker()
     repos = RepoCache(settings.repo_cache_dir)
     executor = Executor(settings, sm, _resolver(settings), repos)
+    locker = PgTemplateLocker(settings.worker_id)
 
     recover(settings, sm, repos)
     log.info("worker started", extra={"worker_id": settings.worker_id})
@@ -62,14 +65,18 @@ def run_worker(settings: Settings) -> int:
     while not stop.is_set():
         try:
             with sm() as session:
-                run_id = queue.claim(session, settings.worker_id)
-            if run_id is None:
+                claimed = queue.claim(session, settings.worker_id, locker)
+            if claimed is None:
                 stop.wait(settings.poll_interval_s)
                 continue
-            log.info("claimed run", extra={"run_id": run_id})
-            executor.execute(run_id)
-        except OperationalError:
+            log.info("claimed run", extra={"run_id": claimed.run_id})
+            try:
+                executor.execute(claimed.run_id)
+            finally:
+                locker.unlock(claimed.template_id)
+        except (OperationalError, psycopg.Error):
             log.exception("database unavailable, retrying")
+            locker.reset()
             stop.wait(settings.poll_interval_s)
 
     log.info("worker stopped")

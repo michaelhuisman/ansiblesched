@@ -1,7 +1,7 @@
 from datetime import datetime
 from enum import StrEnum
 
-from sqlalchemy import CheckConstraint, ForeignKey, Index, Text, UniqueConstraint, func
+from sqlalchemy import CheckConstraint, ForeignKey, Index, Text, UniqueConstraint, func, text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.models.base import Entity, JsonDict
@@ -29,10 +29,22 @@ class Run(Entity):
         ),
         Index("ix_runs_status_created_at", "status", "created_at"),
         Index("ix_runs_template_id_created_at", "template_id", "created_at"),
+        CheckConstraint("overlap_policy IN ('skip', 'queue')", name="overlap_policy"),
+        # Vangrail tegen dubbele runs als twee schedulers kort allebei leider denken te zijn.
+        Index(
+            "uq_runs_schedule_id_scheduled_for",
+            "schedule_id",
+            "scheduled_for",
+            unique=True,
+            postgresql_where=text("schedule_id IS NOT NULL"),
+        ),
     )
 
     template_id: Mapped[int] = mapped_column(ForeignKey("templates.id"))
-    # schedule_id komt in fase 2 (schedules-tabel bestaat nog niet)
+    schedule_id: Mapped[int | None] = mapped_column(ForeignKey("schedules.id", ondelete="SET NULL"))
+    scheduled_for: Mapped[datetime | None]
+    # Gekopieerd van de schedule bij aanmaken; handmatige runs gedragen zich als 'queue'.
+    overlap_policy: Mapped[str] = mapped_column(Text, server_default="queue")
     triggered_by: Mapped[str] = mapped_column(Text)
     status: Mapped[str] = mapped_column(Text, server_default=RunStatus.QUEUED.value)
     # Effectieve launch-parameters: template-waarden samengevoegd met overrides.

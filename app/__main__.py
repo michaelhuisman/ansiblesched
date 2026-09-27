@@ -35,13 +35,15 @@ def _run() -> int:
         from app.worker.loop import run_worker
 
         return run_worker(settings)
+    if args.role == "scheduler":
+        from app.scheduler.leader import run_scheduler
+
+        return run_scheduler(settings)
     if args.role == "migrate":
         from app.core.migrate import upgrade_head
 
         upgrade_head()
         return 0
-
-    log.error("role not implemented", extra={"role": args.role})
     return 2
 
 

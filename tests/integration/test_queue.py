@@ -16,6 +16,16 @@ from tests.integration.conftest import Env
 SCHEMA = "it_claim"
 
 
+class NoopLocker:
+    """Deze tests gaan over rij-locks (SKIP LOCKED), niet over de template-lock."""
+
+    def try_lock(self, template_id: int) -> bool:
+        return True
+
+    def unlock(self, template_id: int) -> None:
+        pass
+
+
 @pytest.fixture
 def isolated_engine() -> Iterator[Engine]:
     """Een eigen schema, zodat de draaiende workers deze runs niet zien."""
@@ -66,8 +76,10 @@ def test_locked_run_is_skipped(isolated_engine: Engine) -> None:
         # Houd een lock op de eerste run, zoals een worker midden in zijn claim.
         holder.execute(select(Run).where(Run.id == first).with_for_update())
         with sm() as other:
-            assert queue.claim(other, "w2") == second
-            assert queue.claim(other, "w2") is None
+            claimed = queue.claim(other, "w2", NoopLocker())
+            assert claimed is not None
+            assert claimed.run_id == second
+            assert queue.claim(other, "w2", NoopLocker()) is None
 
 
 def test_concurrent_claims_are_unique(isolated_engine: Engine) -> None:
@@ -80,8 +92,8 @@ def test_concurrent_claims_are_unique(isolated_engine: Engine) -> None:
         mine: list[int] = []
         start.wait()
         with sm() as session:
-            while (run_id := queue.claim(session, name)) is not None:
-                mine.append(run_id)
+            while (got := queue.claim(session, name, NoopLocker())) is not None:
+                mine.append(got.run_id)
         claimed[name] = mine
 
     with ThreadPoolExecutor(8) as pool:
@@ -99,9 +111,12 @@ def test_concurrent_claims_are_unique(isolated_engine: Engine) -> None:
 
 
 def test_scaled_workers_run_each_run_once(env: Env) -> None:
-    """Met `--scale worker=2`: 20 runs, elk precies één keer uitgevoerd."""
-    template = env.template("ping.yml")
-    run_ids = [env.launch(template)["id"] for _ in range(20)]
+    """Met `--scale worker=2`: 20 runs, elk precies één keer uitgevoerd.
+
+    Verschillende templates, anders lopen de runs door de overlap-lock na elkaar.
+    """
+    templates = [env.template("ping.yml") for _ in range(20)]
+    run_ids = [env.launch(t)["id"] for t in templates]
     runs = [env.wait(run_id, timeout=180) for run_id in run_ids]
 
     assert all(r["status"] == "successful" for r in runs), [r["status"] for r in runs]

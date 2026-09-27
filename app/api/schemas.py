@@ -1,10 +1,11 @@
-from datetime import datetime
+from datetime import UTC, datetime
 from pathlib import PurePosixPath
 from typing import Annotated, Any, Literal, Self
 
-from pydantic import AfterValidator, BaseModel, ConfigDict, Field, model_validator
+from pydantic import AfterValidator, BaseModel, ConfigDict, Field, computed_field, model_validator
 
 from app.models.run import RunStatus
+from app.scheduler.trigger import InvalidScheduleError, build_trigger, next_fire_time
 
 
 def _relative_path(value: str) -> str:
@@ -111,6 +112,40 @@ class TemplateOut(TemplateIn, OrmModel):
     updated_at: datetime
 
 
+# --- schedules -------------------------------------------------------------
+
+
+class ScheduleIn(BaseModel):
+    template_id: int
+    cron: str = Field(description="5 velden: minuut uur dag maand weekdag")
+    timezone: str = "UTC"
+    enabled: bool = True
+    overlap_policy: Literal["skip", "queue"] = "skip"
+    misfire_grace_s: int = Field(default=60, gt=0)
+    extra_vars_override: ExtraVars = Field(default_factory=dict)
+
+    @model_validator(mode="after")
+    def _check_cron(self) -> Self:
+        try:
+            build_trigger(self.cron, self.timezone)
+        except InvalidScheduleError as exc:
+            raise ValueError(str(exc)) from exc
+        return self
+
+
+class ScheduleOut(ScheduleIn, OrmModel):
+    id: int
+    created_at: datetime
+    updated_at: datetime
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def next_run_at(self) -> datetime | None:
+        if not self.enabled:
+            return None
+        return next_fire_time(build_trigger(self.cron, self.timezone), datetime.now(UTC))
+
+
 # --- runs ------------------------------------------------------------------
 
 
@@ -122,6 +157,9 @@ class LaunchIn(BaseModel):
 class RunOut(OrmModel):
     id: int
     template_id: int
+    schedule_id: int | None
+    scheduled_for: datetime | None
+    overlap_policy: Literal["skip", "queue"]
     triggered_by: str
     status: RunStatus
     extra_vars: ExtraVars

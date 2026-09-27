@@ -17,6 +17,15 @@ x-app: &app
 services:
   postgres:
     image: docker.io/library/postgres:16
+    # Een bevroren (niet gecrashte) leider verliest zijn advisory lock binnen ~15s.
+    command:
+      - postgres
+      - -c
+      - tcp_keepalives_idle=5
+      - -c
+      - tcp_keepalives_interval=5
+      - -c
+      - tcp_keepalives_count=2
     environment:
       POSTGRES_USER: scheduler
       POSTGRES_PASSWORD: scheduler # alleen dev
@@ -41,6 +50,14 @@ services:
     command: ["api"]
     ports:
       - "127.0.0.1:8000:8000"
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+
+  # Draai met --scale scheduler=2 om leader election te testen.
+  scheduler:
+    <<: *app
+    command: ["scheduler"]
     depends_on:
       migrate:
         condition: service_completed_successfully

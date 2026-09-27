@@ -21,9 +21,50 @@ state-store: jobstore, queue en locks.
 
 ### Leader election
 
-De scheduler neemt bij het opstarten `pg_try_advisory_lock(<SCHEDULER_LOCK_ID>)` op een
-eigen, langlevende connectie. Alleen de lock-houder start APScheduler. Anderen proberen
-het elke 10 seconden opnieuw. Valt de connectie weg, dan stopt de scheduler direct.
+De scheduler neemt bij het opstarten `pg_try_advisory_lock(0x5343, 1)` op een eigen,
+langlevende connectie. Alleen de lock-houder start APScheduler. Anderen proberen het
+elke 10 seconden opnieuw (`SCHED_SCHEDULER_LOCK_RETRY_S`). Dezelfde connectie doet
+`LISTEN schedules_changed` en dient als health-check. Valt de connectie weg, dan stopt
+APScheduler direct en gaat de replica terug naar follower-modus.
+
+Postgres staat op korte TCP-keepalives. Een bevroren leider (die niet crasht) verliest de
+lock zo binnen ongeveer 15 seconden.
+
+Vangrail: `runs(schedule_id, scheduled_for)` is uniek en inserts gebruiken
+`ON CONFLICT DO NOTHING`. Ook als twee replicas kort allebei leider denken te zijn,
+ontstaat per afvuring maar één run.
+
+### Schedules → APScheduler-jobs
+
+De `schedules`-tabel is de bron van waarheid en de jobs worden daaruit afgeleid.
+De leider reconcilieert na elke `NOTIFY schedules_changed` (die de API na elke wijziging
+stuurt) en daarnaast elke `SCHED_SCHEDULER_SYNC_INTERVAL_S` (5s):
+
+- job-id `schedule:<id>`, job-naam = fingerprint van cron, timezone en misfire_grace_s;
+- nieuw of gewijzigd: `add_job(replace_existing=True)`. Ongewijzigde jobs blijven staan,
+  zodat hun `next_run_time` behouden blijft (nodig voor misfire-detectie na een failover);
+- uitgeschakeld of verwijderd: `remove_job`.
+
+De job leidt `scheduled_for` af uit de trigger: het laatste fire-moment ≤ nu. Dat is
+deterministisch, dus twee leiders komen op dezelfde waarde uit. `coalesce=True`: na
+downtime vuurt een job één keer. Een afvuring buiten de `misfire_grace_s` levert een
+`skipped` run met reden `missed: scheduler unavailable`.
+
+De tabel `apscheduler_jobs` wordt via Alembic aangemaakt. De jobstore doet zelf
+`create(checkfirst=True)`, en dat is dan een no-op.
+
+### Cron-semantiek
+
+Cron-expressies hebben 5 velden en worden geïnterpreteerd zoals Vixie cron:
+
+- weekdag 0 en 7 = zondag, 1 = maandag. APScheduler's `from_crontab` gebruikt
+  0 = maandag, daarom vertalen we het veld naar namen;
+- dag-van-de-maand én weekdag tegelijk beperken wordt geweigerd. Cron combineert die met
+  OF, APScheduler met EN;
+- DST, uur-veld met wildcard of stap (`*`, `*/2`): de job vuurt elk werkelijk uur, dus in
+  het dubbele herfstuur twee keer;
+- DST, vast uur (`30 2 * * *`): de job vuurt één keer per dag. In het voorjaar vuurt een
+  niet-bestaande tijd direct na de sprong.
 
 ### Queue
 
@@ -42,11 +83,20 @@ een interval (default 2s), eventueel later aangevuld met `LISTEN/NOTIFY`.
 
 ### Overlap
 
-Per template neemt de worker `pg_try_advisory_xact_lock(template_id)` of een
-sessie-lock tijdens de run. De policy staat op de schedule:
+Per template houdt de worker tijdens de run een sessie-lock vast:
+`pg_try_advisory_lock(0x5450, template_id)` op een eigen connectie. Een xact-lock volstaat
+niet, want een run beslaat meerdere transacties. De policy wordt bij het aanmaken
+van de run gekopieerd naar `runs.overlap_policy`:
 
-- `skip`: de nieuwe run krijgt status `skipped` met een reden.
-- `queue`: de run blijft `queued` tot de lock vrij is.
+- `skip`: de nieuwe run krijgt status `skipped` met een reden. De scheduler controleert
+  dit al bij het aanmaken (template-lock in `pg_locks` of een eerdere run in de queue).
+  De worker controleert het nog eens bij het claimen.
+- `queue`: de run blijft `queued` tot de lock vrij is. De claim slaat hem over en pakt de
+  volgende kandidaat, zodat andere templates niet blokkeren.
+- Handmatige runs gedragen zich als `queue`.
+
+Leader-lock en template-locks gebruiken de vorm met twee int4-waarden (namespace, id):
+`0x5343` voor de scheduler en `0x5450` voor templates.
 
 ## Datamodel
 
@@ -68,10 +118,11 @@ created_at, updated_at
 
 **schedules**
 id, template_id, cron, timezone, enabled, overlap_policy (`skip` | `queue`),
-misfire_grace_s, extra_vars_override (jsonb), created_at, updated_at
+misfire_grace_s (default 60), extra_vars_override (jsonb), created_at, updated_at
 
 **runs**
-id, template_id, schedule_id (nullable, vanaf fase 2), triggered_by (`schedule` | `user:<sub>`),
+id, template_id, schedule_id (nullable, `ON DELETE SET NULL`), scheduled_for (nullable),
+overlap_policy, triggered_by (`schedule` | `user:<sub>`),
 status, extra_vars (jsonb, effectief), limit (effectief), commit_sha, worker_id, created_at,
 started_at, finished_at, cancel_requested_at, rc, status_reason,
 stats (jsonb: ok/changed/failed/unreachable/skipped/rescued/ignored per host)
@@ -113,7 +164,8 @@ id (bigserial), run_id, seq, event, host, task, created_at, stdout, data (jsonb,
 ```
 GET/POST        /api/v1/projects
 GET/PUT/DELETE  /api/v1/projects/{id}
-(zelfde CRUD voor inventories, credentials, templates, schedules)
+(zelfde CRUD voor inventories, credentials, templates, schedules;
+ een schedule heeft daarnaast een berekend veld `next_run_at`)
 
 POST  /api/v1/templates/{id}/launch     body: extra_vars, limit (optioneel)
 GET   /api/v1/runs                      filters: template_id, status, since
@@ -141,6 +193,8 @@ GET   /metrics                          (fase 4)
 | `SCHED_API_PORT`        | `8000`                         |
 | `SCHED_DEV_SECRETS_DIR` | — (fase 1, vervalt in fase 3)  |
 | `SCHED_ANSIBLE_HOST_KEY_CHECKING` | `true`               |
+| `SCHED_SCHEDULER_LOCK_RETRY_S` | `10`                    |
+| `SCHED_SCHEDULER_SYNC_INTERVAL_S` | `5`                  |
 | `SCHED_OPENBAO_ADDR`    | — (fase 3)                     |
 | `SCHED_OPENBAO_ROLE_ID` | — (fase 3)                     |
 | `SCHED_OPENBAO_SECRET_ID` | — (fase 3)                   |
@@ -241,14 +295,18 @@ proxy.
 
 ## Open punten
 
-- **Overlap-lock (fase 2):** gebruik een sessie-lock (`pg_try_advisory_lock(template_id)`)
-  op een eigen connectie die de hele run openblijft, geen `pg_try_advisory_xact_lock`:
-  een run beslaat meerdere transacties. In fase 1 draaien handmatige runs van hetzelfde
-  template parallel.
+- **Lock-connectie van de worker valt weg tijdens een run:** de template-lock is dan weg,
+  terwijl de run doorloopt. Een tweede run van hetzelfde template kan dan starten.
+  Oplossing: de lock-connectie controleren in de cancel_callback en bij verlies de run
+  afbreken, of accepteren (fase 5).
+- **Failover-test met kill:** `scripts/it-failover.sh` draait op de host. Opnemen in CI
+  (fase 5).
 - **Runs van verdwenen workers:** een worker zet bij het opstarten alleen zijn eigen
   `running` runs op `error`. Met een willekeurige container-hostname als `worker_id`
-  blijven runs van een gecrashte, niet-herstarte worker op `running` staan. Nodig:
-  heartbeat-kolom plus reaper (fase 2 of 5).
+  blijven runs van een gecrashte, niet-herstarte worker op `running` staan. Sinds
+  fase 2 blokkeren ze de overlap niet meer, want die kijkt naar `pg_locks` en de lock
+  verdwijnt met de connectie. Ze blijven wel als `running` zichtbaar. Nodig: een
+  reaper die `running` runs zonder template-lock op `error` zet (fase 5).
 - **SSE `/runs/{id}/stream`:** verschoven naar fase 4 (acceptatiecriterium daar).
 - **Host key checking in productie:** in dev staat het uit. Voor productie is een
   known_hosts-beheer nodig (per inventory of project), anders falen runs of moet
