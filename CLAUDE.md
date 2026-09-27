@@ -46,7 +46,7 @@ draait in de `dev`-container (Python 3.12, broncode gemount); lokaal is geen 3.1
 
 ```bash
 # dev-omgeving (eenmalig: scripts/dev-keys.sh)
-podman compose -f compose.dev.yml up -d --build --scale worker=2
+podman compose -f compose.dev.yml up -d --build --scale worker=2 --scale scheduler=2
 
 # kwaliteit, in de dev-container
 DEV="podman compose -f compose.dev.yml run --rm dev"
@@ -54,6 +54,8 @@ $DEV sh -c 'ruff check . && ruff format --check .'
 $DEV mypy app
 $DEV pytest tests/unit
 $DEV pytest tests/integration     # vereist draaiende compose.dev.yml
+$DEV pytest tests/integration -m "not slow"   # zonder de tests die minuten op cron wachten
+scripts/it-failover.sh            # op de host: kill de scheduler-leider, check takeover
 
 # migraties
 $DEV alembic revision --autogenerate -m "<omschrijving>"

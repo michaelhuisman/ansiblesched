@@ -25,6 +25,10 @@ class Settings(BaseSettings):
 
     ansible_host_key_checking: bool = True
 
+    scheduler_lock_retry_s: float = 10.0
+    # Maximale tijd tussen twee reconciles van schedules -> jobs (NOTIFY is sneller).
+    scheduler_sync_interval_s: float = 5.0
+
 
 @lru_cache
 def get_settings() -> Settings:

@@ -7,6 +7,7 @@ from app.models.base import Entity, JsonDict, TimestampMixin
 
 CREDENTIAL_TYPES = ("ssh_key", "vault_password", "git_token")
 INVENTORY_SOURCES = ("project_file", "inline")
+OVERLAP_POLICIES = ("skip", "queue")
 
 
 def _in(column: str, values: tuple[str, ...]) -> str:
@@ -72,3 +73,19 @@ class Template(TimestampMixin, Entity):
     machine_credential_id: Mapped[int] = mapped_column(ForeignKey("credentials.id"))
     vault_credential_id: Mapped[int | None] = mapped_column(ForeignKey("credentials.id"))
     timeout_s: Mapped[int | None]
+
+
+class Schedule(TimestampMixin, Entity):
+    __tablename__ = "schedules"
+    __table_args__ = (
+        CheckConstraint(_in("overlap_policy", OVERLAP_POLICIES), name="overlap_policy"),
+        CheckConstraint("misfire_grace_s > 0", name="misfire_grace_s"),
+    )
+
+    template_id: Mapped[int] = mapped_column(ForeignKey("templates.id"))
+    cron: Mapped[str] = mapped_column(Text)
+    timezone: Mapped[str] = mapped_column(Text)
+    enabled: Mapped[bool] = mapped_column(server_default="true")
+    overlap_policy: Mapped[str] = mapped_column(Text, server_default="skip")
+    misfire_grace_s: Mapped[int] = mapped_column(server_default="60")
+    extra_vars_override: Mapped[JsonDict] = mapped_column(server_default="{}")

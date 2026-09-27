@@ -25,9 +25,17 @@ strict = true
 plugins = ["pydantic.mypy"]
 
 [[tool.mypy.overrides]]
-module = ["ansible_runner", "ansible_runner.*"]
+module = ["ansible_runner", "ansible_runner.*", "apscheduler", "apscheduler.*"]
 ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+# DstSafeCronTrigger subclasst het ongetypeerde CronTrigger.
+module = ["app.scheduler.trigger"]
+disallow_subclassing_any = false
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-markers = ["integration: vereist draaiende compose.dev.yml"]
+markers = [
+    "integration: vereist draaiende compose.dev.yml",
+    "slow: wacht op echte cron-afvuringen (minuten); overslaan met -m \"not slow\"",
+]

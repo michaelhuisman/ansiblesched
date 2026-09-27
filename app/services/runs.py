@@ -26,6 +26,8 @@ def launch(
         template_id=template.id,
         triggered_by=triggered_by,
         status=RunStatus.QUEUED,
+        # Handmatige runs wachten op een lopende run van hetzelfde template.
+        overlap_policy="queue",
         extra_vars={**template.extra_vars, **(extra_vars or {})},
         limit=limit if limit is not None else template.limit,
     )
