@@ -1,0 +1,38 @@
+<section id="run-meta" class="card"
+  {% if run.status not in FINAL_STATUSES %}hx-get="/ui/runs/{{ run.id }}/meta" hx-trigger="every 2s" hx-swap="outerHTML"{% endif %}>
+  <dl class="meta">
+    <div><dt>Status</dt><dd>{% with status=run.status %}{% include "_status.html" %}{% endwith %}
+      {% if run.cancel_requested_at and run.status == 'running' %}<span class="muted">(annuleren aangevraagd)</span>{% endif %}</dd></div>
+    <div><dt>rc</dt><dd class="mono">{{ run.rc if run.rc is not none else '–' }}</dd></div>
+    <div><dt>Trigger</dt><dd>{{ run.triggered_by }}{% if schedule %} · <a href="/ui/schedules">schedule {{ schedule.id }}</a>{% endif %}</dd></div>
+    <div><dt>Commit</dt><dd class="mono">{{ run.commit_sha[:12] if run.commit_sha else '–' }}</dd></div>
+    <div><dt>Gestart</dt><dd class="mono">{{ run.started_at | dt or '–' }}</dd></div>
+    <div><dt>Duur</dt><dd class="mono">{{ duration(run.started_at, run.finished_at) or '–' }}</dd></div>
+    <div><dt>Worker</dt><dd class="mono">{{ run.worker_id or '–' }}</dd></div>
+    {% if run.limit %}<div><dt>Limit</dt><dd class="mono">{{ run.limit }}</dd></div>{% endif %}
+  </dl>
+  {% if run.status_reason %}<p class="reason">{{ run.status_reason }}</p>{% endif %}
+  {% if error %}<p class="error">{{ error }}</p>{% endif %}
+  {% if run.stats %}
+    {% set hosts = [] %}
+    {% for counts in run.stats.values() %}{% for h in counts %}{% if h not in hosts %}{% set _ = hosts.append(h) %}{% endif %}{% endfor %}{% endfor %}
+    {% if hosts %}
+    <table class="grid stats">
+      <thead><tr><th>Host</th>{% for k in ['ok', 'changed', 'failed', 'unreachable', 'skipped', 'rescued', 'ignored'] %}<th>{{ k }}</th>{% endfor %}</tr></thead>
+      <tbody>
+      {% for h in hosts | sort %}
+        <tr><td class="mono">{{ h }}</td>
+        {% for k in ['ok', 'changed', 'failed', 'unreachable', 'skipped', 'rescued', 'ignored'] %}
+          {% set n = run.stats.get(k, {}).get(h, 0) %}
+          <td class="num {% if n and k in ['failed', 'unreachable'] %}bad{% elif n and k == 'changed' %}warn{% endif %}">{{ n }}</td>
+        {% endfor %}</tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    {% endif %}
+  {% endif %}
+  {% if run.status not in FINAL_STATUSES and user.can(Action.CANCEL) and not run.cancel_requested_at %}
+    <button class="danger" hx-post="/ui/runs/{{ run.id }}/cancel" hx-target="#run-meta" hx-swap="outerHTML"
+            hx-confirm="Run {{ run.id }} annuleren?">Annuleren</button>
+  {% endif %}
+</section>

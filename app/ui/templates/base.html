@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="nl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}ansible-scheduler{% endblock %}</title>
+  <link rel="stylesheet" href="/ui/static/app.css">
+  <script src="/ui/static/htmx.min.js" defer></script>
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="/ui/runs">ansible-scheduler</a>
+    <nav>
+      {% set section = request.url.path.split('/')[2] if request.url.path.count('/') > 1 else '' %}
+      <a href="/ui/runs" {% if section == 'runs' %}aria-current="page"{% endif %}>Runs</a>
+      <a href="/ui/templates" {% if section == 'templates' %}aria-current="page"{% endif %}>Templates</a>
+      <a href="/ui/schedules" {% if section == 'schedules' %}aria-current="page"{% endif %}>Schedules</a>
+    </nav>
+    <span class="user" title="Fase 3: geen authenticatie (alleen dev)">{{ user.subject }}</span>
+  </header>
+  <main>
+    {% block content %}{% endblock %}
+  </main>
+</body>
+</html>

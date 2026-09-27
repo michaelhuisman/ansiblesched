@@ -1,13 +1,17 @@
 import logging
 
 from fastapi import APIRouter, FastAPI, Request, status
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, RedirectResponse, Response
+from fastapi.staticfiles import StaticFiles
+from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
 from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
 
 from app.api.routers import config, runs
-from app.core.db import get_engine
+from app.core.db import get_engine, get_sessionmaker
 from app.services.errors import ConflictError, InvalidReferenceError, NotFoundError, ServiceError
+from app.services.metrics import build_registry
+from app.ui import routes as ui
 
 log = logging.getLogger(__name__)
 
@@ -32,6 +36,17 @@ def create_app() -> FastAPI:
         v1.include_router(router)
     v1.include_router(runs.router)
     app.include_router(v1)
+    app.include_router(ui.router)
+    app.mount("/ui/static", StaticFiles(directory=ui.STATIC_DIR), name="static")
+    registry = build_registry(get_sessionmaker())
+
+    @app.get("/", include_in_schema=False)
+    def root() -> RedirectResponse:
+        return RedirectResponse("/ui/runs")
+
+    @app.get("/metrics", include_in_schema=False)
+    def metrics() -> Response:
+        return Response(generate_latest(registry), media_type=CONTENT_TYPE_LATEST)
 
     @app.get("/healthz", include_in_schema=False)
     def healthz() -> dict[str, str]:

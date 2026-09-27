@@ -9,12 +9,14 @@ aan een fase begint.
 
 - Python 3.12
 - FastAPI + uvicorn (API)
+- Jinja2 + htmx voor de UI (server-rendered; htmx vendored, geen Node-toolchain)
+- prometheus-client (metrics), httpx (webhooks)
 - SQLAlchemy 2.x, **synchrone** sessies, `psycopg` 3 als driver
 - Alembic voor alle schemawijzigingen
 - APScheduler 3.x met `SQLAlchemyJobStore` op Postgres
 - ansible-core (vastgepinde versie in `requirements.txt`) + ansible-runner
 - pydantic v2 + pydantic-settings voor config
-- hvac voor OpenBao (vanaf fase 3)
+- hvac voor OpenBao (vanaf fase 4)
 - pytest, ruff (lint + format), mypy (strict op `app/`)
 - Postgres 16
 - Docker Compose voor dev en productie
@@ -25,6 +27,7 @@ aan een fase begint.
 app/
   __main__.py      # python -m app {api|scheduler|worker|migrate}
   api/             # FastAPI routers, schemas (pydantic)
+  ui/              # server-rendered UI: Jinja2-templates, htmx (vendored) en statics
   scheduler/       # APScheduler setup, leader election, schedule -> run enqueue
   worker/          # queue consumer, ansible-runner wrapper, git checkout
   models/          # SQLAlchemy models

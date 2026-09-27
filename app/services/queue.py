@@ -8,9 +8,10 @@ from sqlalchemy import func, insert, or_, select, text, update
 from sqlalchemy.orm import Session
 
 from app.core.locks import NS_TEMPLATE
-from app.models import Run, RunEvent, RunStatus
+from app.models import Notification, Run, RunEvent, RunStatus
 
 CLAIM_BATCH = 20
+NOTIFY_STATUSES = frozenset({RunStatus.FAILED, RunStatus.ERROR, RunStatus.TIMEOUT})
 
 
 class TemplateLocker(Protocol):
@@ -99,9 +100,12 @@ def finish(
     rc: int | None = None,
     stats: dict[str, Any] | None = None,  # ansible-runner stats: JSON
     reason: str | None = None,
+    notify_targets: Sequence[str] = (),
 ) -> None:
+    """Rond de run af. Bij een fout-status worden in dezelfde transactie notificaties
+    in de outbox gezet, zodat ze ook na een crash nog verstuurd worden."""
     with session.begin():
-        session.execute(
+        finished = session.scalar(
             update(Run)
             .where(Run.id == run_id, Run.status == RunStatus.RUNNING)
             .values(
@@ -111,7 +115,13 @@ def finish(
                 status_reason=reason,
                 finished_at=func.now(),
             )
+            .returning(Run.id)
         )
+        if finished is not None and status in NOTIFY_STATUSES and notify_targets:
+            session.execute(
+                insert(Notification),
+                [{"run_id": run_id, "target": t, "event": f"run.{status}"} for t in notify_targets],
+            )
 
 
 # Rijen voor run_events; de sleutels komen overeen met de kolommen.

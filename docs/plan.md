@@ -134,6 +134,11 @@ lopende run; de worker pikt dat op via `cancel_callback`.
 **run_events**
 id (bigserial), run_id, seq, event, host, task, created_at, stdout, data (jsonb, gefilterd)
 
+**notifications** (outbox voor webhooks)
+id, run_id, target (fingerprint van de webhook-URL, nooit de URL zelf), event,
+status (`pending` | `sent` | `failed`), attempts, next_attempt_at, last_error,
+created_at, sent_at
+
 ### Run-statussen
 
 `queued` → `running` → `successful` | `failed` | `error` | `timeout` | `canceled`
@@ -176,7 +181,9 @@ POST  /api/v1/runs/{id}/cancel
 
 GET   /healthz                          liveness
 GET   /readyz                           db-connectie
-GET   /metrics                          (fase 4)
+GET   /metrics                          Prometheus (fase 3)
+
+GET   /ui/...                           server-rendered UI (Jinja2 + htmx)
 ```
 
 ## Configuratie (env, prefix `SCHED_`)
@@ -191,15 +198,18 @@ GET   /metrics                          (fase 4)
 | `SCHED_LOG_LEVEL`       | `INFO`                         |
 | `SCHED_API_HOST`        | `0.0.0.0`                      |
 | `SCHED_API_PORT`        | `8000`                         |
-| `SCHED_DEV_SECRETS_DIR` | — (fase 1, vervalt in fase 3)  |
+| `SCHED_DEV_SECRETS_DIR` | — (fase 1, vervalt in fase 4)  |
 | `SCHED_ANSIBLE_HOST_KEY_CHECKING` | `true`               |
 | `SCHED_SCHEDULER_LOCK_RETRY_S` | `10`                    |
 | `SCHED_SCHEDULER_SYNC_INTERVAL_S` | `5`                  |
-| `SCHED_OPENBAO_ADDR`    | — (fase 3)                     |
-| `SCHED_OPENBAO_ROLE_ID` | — (fase 3)                     |
-| `SCHED_OPENBAO_SECRET_ID` | — (fase 3)                   |
-| `SCHED_OIDC_ISSUER`     | — (fase 3)                     |
-| `SCHED_OIDC_AUDIENCE`   | — (fase 3)                     |
+| `SCHED_PUBLIC_URL`      | `http://localhost:8000`        |
+| `SCHED_WEBHOOK_URLS`    | `[]` (JSON-lijst; fase 4 → OpenBao) |
+| `SCHED_WEBHOOK_SECRET`  | — (HMAC-SHA256-signatuur)      |
+| `SCHED_OPENBAO_ADDR`    | — (fase 4)                     |
+| `SCHED_OPENBAO_ROLE_ID` | — (fase 4)                     |
+| `SCHED_OPENBAO_SECRET_ID` | — (fase 4)                   |
+| `SCHED_OIDC_ISSUER`     | — (fase 4)                     |
+| `SCHED_OIDC_AUDIENCE`   | — (fase 4)                     |
 
 ## Dev-omgeving (`compose.dev.yml`)
 
@@ -252,7 +262,39 @@ enable), overlap-policies en misfire-afhandeling.
 - Een wijziging van een schedule via de API is actief zonder herstart.
 - DST-overgang: een unit test met tijdzone `Europe/Amsterdam` vuurt correct.
 
-## Fase 3 — Secrets en auth
+## Fase 3 — UI en observability
+
+_Volgorde omgedraaid t.o.v. het oorspronkelijke plan: de UI eerst, omdat die voorlopig
+alleen in dev draait. Auth-naden (`current_user`) zitten er vanaf fase 3 al in._
+
+**Scope:** een frontend (runs-overzicht, live log-view, templates en schedules
+beheren), `/metrics` met Prometheus (run-duur-histogram, runs per status per template,
+queue-diepte, laatste succesvolle run per schedule) en webhook-notificaties bij
+`failed`, `error` en `timeout`.
+
+**Uitwerking**
+- **UI:** server-rendered met Jinja2 en htmx (2.0.11, vendored in `app/ui/static`, geen
+  Node-toolchain). Onder `/ui`. Formulieren valideren met dezelfde pydantic-schema's als
+  de API.
+- **SSE:** `GET /api/v1/runs/{id}/stream` stuurt `run_event` (id = seq), `status` en
+  `end`. De server pollt `run_events` elke 0,5s. Herverbinden gaat verder vanaf
+  `Last-Event-ID`. In de UI via `EventSource`; in fase 4 werkt dat met een sessiecookie
+  zonder aanpassingen.
+- **Metrics:** een eigen collector berekent bij elke scrape alles uit Postgres. Zo zijn
+  de waarden gelijk over api, scheduler en worker-replicas en altijd actueel.
+- **Webhooks:** een outbox-tabel `notifications`, gevuld in dezelfde transactie als het
+  afronden van de run. De scheduler-leider verstuurt elke 5s (`SKIP LOCKED`) met backoff
+  5s → 10s → … max 10 min, en geeft na 10 pogingen op (`failed`). Optioneel een
+  HMAC-SHA256-signatuur in `X-Scheduler-Signature`.
+- **Auth-naad:** `current_user()` geeft in fase 3 een anonieme admin terug. Routes en
+  templates checken `Principal.can(action)`.
+
+**Acceptatiecriteria**
+- Het live log in de UI volgt een lopende run via SSE.
+- De metrics zijn scrapebaar en worden bijgewerkt bij statuswijzigingen.
+- De webhook stuurt JSON met run-id, template, status en een link. Retry met backoff.
+
+## Fase 4 — Secrets en auth
 
 **Scope:** een OpenBao-client (AppRole-login, token renew), credential resolutie in de
 worker, Keycloak OIDC-validatie (JWT via JWKS) en RBAC op client roles `viewer`,
@@ -265,18 +307,6 @@ worker, Keycloak OIDC-validatie (JWT via JWKS) en RBAC op client roles `viewer`,
   configuratie wijzigen.
 - Een verlopen of ongeldige token geeft 401, een ontbrekende rol 403.
 - In dev: OpenBao in dev-mode en een Keycloak-container in `compose.dev.yml`.
-
-## Fase 4 — UI en observability
-
-**Scope:** een frontend (runs-overzicht, live log-view, templates en schedules
-beheren), `/metrics` met Prometheus (run-duur-histogram, runs per status per template,
-queue-diepte, laatste succesvolle run per schedule) en webhook-notificaties bij
-`failed`, `error` en `timeout`.
-
-**Acceptatiecriteria**
-- Het live log in de UI volgt een lopende run via SSE.
-- De metrics zijn scrapebaar en worden bijgewerkt bij statuswijzigingen.
-- De webhook stuurt JSON met run-id, template, status en een link. Retry met backoff.
 
 ## Fase 5 — Hardening en productie
 
@@ -295,6 +325,17 @@ proxy.
 
 ## Open punten
 
+- **SSE schaalt per thread:** elke open stream houdt een thread uit de threadpool bezet
+  en pollt de database. Voor dev en kleine schaal is dat prima. Bij meer kijkers:
+  `LISTEN/NOTIFY` op nieuwe events of een async generator (fase 5).
+- **CSRF (fase 4):** zodra auth via een sessiecookie loopt, hebben de UI-formulieren en
+  htmx-POSTs CSRF-bescherming nodig (token of `SameSite=strict` plus Origin-check).
+- **Webhook-URL's naar OpenBao (fase 4):** nu staan ze als JSON-lijst in de env.
+- **Metrics en retentie (fase 5):** `sched_runs_total` wordt uit de runs-tabel geteld.
+  Retentie laat de waarde dalen, wat Prometheus als counter-reset ziet. Oplossing: een
+  aggregatietabel bijhouden of de metric als gauge exposen.
+- **UI op smalle schermen:** de tabellen zijn voor desktop gemaakt en scrollen op een
+  telefoon niet netjes.
 - **Lock-connectie van de worker valt weg tijdens een run:** de template-lock is dan weg,
   terwijl de run doorloopt. Een tweede run van hetzelfde template kan dan starten.
   Oplossing: de lock-connectie controleren in de cancel_callback en bij verlies de run
@@ -307,14 +348,11 @@ proxy.
   fase 2 blokkeren ze de overlap niet meer, want die kijkt naar `pg_locks` en de lock
   verdwijnt met de connectie. Ze blijven wel als `running` zichtbaar. Nodig: een
   reaper die `running` runs zonder template-lock op `error` zet (fase 5).
-- **SSE `/runs/{id}/stream`:** verschoven naar fase 4 (acceptatiecriterium daar).
 - **Host key checking in productie:** in dev staat het uit. Voor productie is een
   known_hosts-beheer nodig (per inventory of project), anders falen runs of moet
-  checking uit (fase 3 of 5).
+  checking uit (fase 4 of 5).
 - **Git-credentials:** `projects.credential_id` (type `git_token`) wordt nog niet
-  gebruikt; alleen publieke of `file://`-repo's werken. Oppakken in fase 3 met OpenBao.
+  gebruikt; alleen publieke of `file://`-repo's werken. Oppakken in fase 4 met OpenBao.
 - **Remote processen bij cancel/timeout:** ansible-runner stopt het lokale
   ansible-proces; een lopend commando op de target (bv. `sleep`) loopt daar door.
-- **Productie-credentials:** tot fase 3 heeft `compose.yml` geen credential-backend.
-- **ssh-agent-melding:** het eerste event bevat `Identity added: .../ssh_key_data (<comment>)`.
-  Onschuldig, maar de key-comment is zichtbaar; eventueel wegfilteren.
+- **Productie-credentials:** tot fase 4 heeft `compose.yml` geen credential-backend.

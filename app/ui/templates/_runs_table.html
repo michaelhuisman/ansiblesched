@@ -1,0 +1,20 @@
+<table class="grid">
+  <thead>
+    <tr><th>#</th><th>Template</th><th>Status</th><th>Trigger</th><th>Gepland / aangemaakt (UTC)</th><th>Duur</th><th>Worker</th></tr>
+  </thead>
+  <tbody>
+  {% for r in runs %}
+    <tr>
+      <td><a href="/ui/runs/{{ r.id }}">{{ r.id }}</a></td>
+      <td>{{ template_names.get(r.template_id, r.template_id) }}</td>
+      <td>{% with status=r.status %}{% include "_status.html" %}{% endwith %}</td>
+      <td class="muted">{{ r.triggered_by }}</td>
+      <td class="mono">{{ (r.scheduled_for or r.created_at) | dt }}</td>
+      <td class="mono">{{ duration(r.started_at, r.finished_at) }}</td>
+      <td class="muted mono">{{ r.worker_id or '' }}</td>
+    </tr>
+  {% else %}
+    <tr><td colspan="7" class="empty">Geen runs gevonden.</td></tr>
+  {% endfor %}
+  </tbody>
+</table>

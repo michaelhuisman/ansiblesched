@@ -1,0 +1,34 @@
+{% extends "base.html" %}
+{% block title %}Templates · ansible-scheduler{% endblock %}
+{% block content %}
+<div class="page-head">
+  <h1>Templates</h1>
+  {% if user.can(Action.CONFIGURE) %}<a class="button" href="/ui/templates/new">Nieuw template</a>{% endif %}
+</div>
+<table class="grid">
+  <thead><tr><th>Naam</th><th>Project</th><th>Playbook</th><th>Limit</th><th>Timeout</th><th></th></tr></thead>
+  <tbody>
+  {% for t in templates %}
+    <tr>
+      <td>{{ t.name }}</td>
+      <td class="muted">{{ projects.get(t.project_id, t.project_id) }}</td>
+      <td class="mono">{{ t.playbook_path }}</td>
+      <td class="mono">{{ t.limit or '' }}</td>
+      <td class="mono">{{ (t.timeout_s ~ 's') if t.timeout_s else '' }}</td>
+      <td class="actions">
+        {% if user.can(Action.LAUNCH) %}<a class="button small" href="/ui/templates/{{ t.id }}/launch">Launch</a>{% endif %}
+        <a class="button small secondary" href="/ui/runs?template_id={{ t.id }}">Runs</a>
+        {% if user.can(Action.CONFIGURE) %}
+          <a class="button small secondary" href="/ui/templates/{{ t.id }}/edit">Bewerken</a>
+          <button class="small danger" hx-post="/ui/templates/{{ t.id }}/delete" hx-target="next .row-error"
+                  hx-confirm="Template '{{ t.name }}' verwijderen?">Verwijderen</button>
+          <span class="row-error"></span>
+        {% endif %}
+      </td>
+    </tr>
+  {% else %}
+    <tr><td colspan="6" class="empty">Nog geen templates.</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% endblock %}

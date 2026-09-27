@@ -10,6 +10,10 @@ x-app: &app
   environment: &app-env
     SCHED_DATABASE_URL: postgresql+psycopg://scheduler:scheduler@postgres:5432/scheduler
     SCHED_LOG_LEVEL: INFO
+    SCHED_PUBLIC_URL: http://localhost:8000
+    # Alleen dev: de sink hieronder. Echte webhook-URL's zijn secrets.
+    SCHED_WEBHOOK_URLS: '["http://webhook-sink:8080/hook"]'
+    SCHED_WEBHOOK_SECRET: dev-webhook-secret
   depends_on:
     postgres:
       condition: service_healthy
@@ -104,6 +108,13 @@ services:
     volumes:
       - ./.dev/secrets/ssh-target/id_ed25519.pub:/authorized_keys:ro
 
+  # Ontvangt webhooks; tests lezen /received en kunnen fouten forceren via /fail.
+  webhook-sink:
+    image: docker.io/library/python:3.12-slim
+    command: ["python", "/sink/server.py"]
+    volumes:
+      - ./dev/webhook-sink:/sink:ro
+
   # Tooling en tests: podman compose -f compose.dev.yml run --rm dev <cmd>
   dev:
     <<: *app
@@ -115,6 +126,7 @@ services:
     environment:
       <<: *app-env
       SCHED_IT_API_URL: http://api:8000
+      SCHED_IT_WEBHOOK_SINK: http://webhook-sink:8080
       GIT_CONFIG_COUNT: "1"
       GIT_CONFIG_KEY_0: safe.directory
       GIT_CONFIG_VALUE_0: "*"
