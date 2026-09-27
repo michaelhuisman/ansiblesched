@@ -1,0 +1,7 @@
+- name: Fail on purpose
+  hosts: all
+  gather_facts: false
+  tasks:
+    - name: This task always fails
+      ansible.builtin.command: /bin/false
+      changed_when: false
