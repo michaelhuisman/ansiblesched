@@ -1,0 +1,9 @@
+- name: Place a file
+  hosts: all
+  gather_facts: false
+  tasks:
+    - name: Write marker file
+      ansible.builtin.copy:
+        dest: /tmp/ansible-scheduler-marker.txt
+        content: "{{ marker | default('hello from ansible-scheduler') }}\n"
+        mode: "0644"

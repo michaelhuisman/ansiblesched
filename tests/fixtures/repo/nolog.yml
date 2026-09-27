@@ -1,0 +1,19 @@
+# Test voor event-filtering: `nolog_secret` mag nergens in run_events terechtkomen.
+- name: No-log handling
+  hosts: all
+  gather_facts: false
+  vars:
+    nolog_secret: "{{ secret_value | default('s3cr3t-fixture-value') }}"
+  tasks:
+    - name: Use a secret with no_log
+      ansible.builtin.debug:
+        msg: "the secret is {{ nolog_secret }}"
+      no_log: true
+
+    - name: Secret in a password-like field
+      ansible.builtin.set_fact:
+        db_password: "{{ nolog_secret }}"
+
+    - name: Report done
+      ansible.builtin.debug:
+        msg: done

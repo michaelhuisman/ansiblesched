@@ -1,0 +1,33 @@
+[project]
+name = "ansible-scheduler"
+version = "0.1.0"
+requires-python = ">=3.12,<3.13"
+
+[tool.ruff]
+target-version = "py312"
+line-length = 100
+extend-exclude = ["tests/fixtures"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP", "S", "SIM", "RUF", "PT", "DTZ", "T20"]
+ignore = [
+    "S603", # subprocess zonder shell is hier de bedoeling (git)
+    "S607", # git wordt via PATH gevonden
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["S101", "S105", "S106", "S108"]
+"migrations/**" = ["E501"]
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+plugins = ["pydantic.mypy"]
+
+[[tool.mypy.overrides]]
+module = ["ansible_runner", "ansible_runner.*"]
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = ["integration: vereist draaiende compose.dev.yml"]

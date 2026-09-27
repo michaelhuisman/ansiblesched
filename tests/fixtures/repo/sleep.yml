@@ -1,0 +1,7 @@
+- name: Sleep for timeout and cancel tests
+  hosts: all
+  gather_facts: false
+  tasks:
+    - name: Sleep
+      ansible.builtin.command: "sleep {{ sleep_s | default(120) }}"
+      changed_when: false

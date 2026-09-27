@@ -1,0 +1,57 @@
+# Productie (minimaal; wordt in fase 5 afgemaakt). Vereist in .env:
+#   SCHED_IMAGE, POSTGRES_PASSWORD
+# Let op: tot fase 3 (OpenBao) is er in productie geen credential-backend.
+
+x-app: &app
+  image: ${SCHED_IMAGE:?set SCHED_IMAGE}
+  restart: unless-stopped
+  environment: &app-env
+    SCHED_DATABASE_URL: postgresql+psycopg://scheduler:${POSTGRES_PASSWORD:?}@postgres:5432/scheduler
+    SCHED_LOG_LEVEL: INFO
+  depends_on:
+    migrate:
+      condition: service_completed_successfully
+
+services:
+  postgres:
+    image: docker.io/library/postgres:16
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: scheduler
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?}
+      POSTGRES_DB: scheduler
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U scheduler -d scheduler"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  migrate:
+    image: ${SCHED_IMAGE:?set SCHED_IMAGE}
+    command: ["migrate"]
+    restart: "no"
+    environment: *app-env
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  api:
+    <<: *app
+    command: ["api"]
+    ports:
+      - "127.0.0.1:8000:8000"
+
+  worker:
+    <<: *app
+    command: ["worker"]
+    stop_grace_period: 1h
+    tmpfs:
+      - /run/scheduler:size=1g,uid=10001,gid=10001,mode=0700
+    volumes:
+      - repocache:/var/cache/scheduler/repos
+
+volumes:
+  pgdata:
+  repocache:
