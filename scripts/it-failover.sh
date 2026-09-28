@@ -32,7 +32,7 @@ leader() {
 fail() { echo "FAIL: $*" >&2; exit 1; }
 
 suffix=$RANDOM$RANDOM
-cred=$(post /credentials "{\"name\":\"fo-key-$suffix\",\"type\":\"ssh_key\",\"openbao_path\":\"ssh-target\",\"openbao_key\":\"id_ed25519\"}" | field id)
+cred=$(post /credentials "{\"name\":\"fo-key-$suffix\",\"type\":\"ssh_key\",\"openbao_path\":\"ssh/ssh-target\",\"openbao_key\":\"id_ed25519\"}" | field id)
 proj=$(post /projects "{\"name\":\"fo-proj-$suffix\",\"git_url\":\"file:///fixtures/repo.git\"}" | field id)
 inv=$(post /inventories "{\"name\":\"fo-inv-$suffix\",\"source_type\":\"inline\",\"content\":\"ssh-target ansible_user=ansible ansible_python_interpreter=/usr/bin/python3\\n\"}" | field id)
 tpl=$(post /templates "{\"name\":\"fo-ping-$suffix\",\"project_id\":$proj,\"playbook_path\":\"ping.yml\",\"inventory_id\":$inv,\"machine_credential_id\":$cred}" | field id)

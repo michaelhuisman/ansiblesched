@@ -15,10 +15,10 @@ from sqlalchemy import select
 
 from app.core.db import get_sessionmaker
 from app.models import Notification
-from tests.integration.conftest import API_URL, Env, LocalUser, login_ui, unique
+from tests.integration.conftest import API_URL, SECRETS_DIR, Env, LocalUser, login_ui, unique
 
 SINK = os.environ.get("SCHED_IT_WEBHOOK_SINK", "http://127.0.0.1:8080")
-WEBHOOK_SECRET = "dev-webhook-secret"  # zie compose.dev.yml
+WEBHOOK_SECRET = (SECRETS_DIR / "webhook" / "hmac").read_text().strip()  # in OpenBao
 
 
 # --- SSE -----------------------------------------------------------------------

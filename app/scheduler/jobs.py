@@ -2,12 +2,14 @@
 module en namen niet verplaatsen."""
 
 import logging
+import time
 from datetime import UTC, datetime, timedelta
 
 import httpx
 
 from app.core.config import get_settings
 from app.core.db import get_sessionmaker
+from app.core.openbao import OpenBaoError, get_openbao
 from app.scheduler.trigger import build_trigger, latest_fire_time
 from app.services import notifications, schedules, sessions
 
@@ -81,16 +83,54 @@ NOTIFICATIONS_JOB_ID = "internal:notifications"
 NOTIFICATIONS_INTERVAL_S = 5
 
 
+class _WebhookConfigCache:
+    """Webhook-config uit OpenBao, `webhook_cache_s` seconden gecachet. Een rotatie in
+    OpenBao is zo zonder herstart actief."""
+
+    def __init__(self) -> None:
+        self._value: notifications.WebhookConfig | None = None
+        self._loaded_at = 0.0
+
+    def get(self) -> notifications.WebhookConfig | None:
+        """None als OpenBao (tijdelijk) niet te lezen is: dan niets versturen of
+        uitsplitsen, zodat er geen notificatie verloren gaat."""
+        settings = get_settings()
+        if not settings.webhook_openbao_path:
+            return notifications.WebhookConfig(urls=())
+        if (
+            self._value is not None
+            and time.monotonic() - self._loaded_at < settings.webhook_cache_s
+        ):
+            return self._value
+        client = get_openbao()
+        if client is None:
+            log.warning("webhook_openbao_path is set but OpenBao is not configured")
+            return None
+        try:
+            self._value = notifications.WebhookConfig.from_secret(
+                client.read(settings.webhook_openbao_path)
+            )
+        except (OpenBaoError, ValueError) as exc:
+            log.warning("cannot load webhook config", extra={"reason": str(exc)})
+            return None
+        self._loaded_at = time.monotonic()
+        return self._value
+
+
+_webhooks = _WebhookConfigCache()
+
+
 def deliver_notifications() -> None:
-    settings = get_settings()
-    secret = settings.webhook_secret.get_secret_value() if settings.webhook_secret else None
+    config = _webhooks.get()
+    if config is None:
+        return
     with httpx.Client(follow_redirects=False) as client, get_sessionmaker()() as session:
         notifications.deliver_due(
             session,
             client,
-            urls=notifications.targets(settings.webhook_urls),
-            public_url=settings.public_url,
-            secret=secret,
+            urls=config.targets(),
+            public_url=get_settings().public_url,
+            secret=config.hmac_secret,
         )
 
 

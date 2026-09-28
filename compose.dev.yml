@@ -11,9 +11,6 @@ x-app: &app
     SCHED_DATABASE_URL: postgresql+psycopg://scheduler:scheduler@postgres:5432/scheduler
     SCHED_LOG_LEVEL: INFO
     SCHED_PUBLIC_URL: http://localhost:8000
-    # Alleen dev: de sink hieronder. Echte webhook-URL's zijn secrets.
-    SCHED_WEBHOOK_URLS: '["http://webhook-sink:8080/hook"]'
-    SCHED_WEBHOOK_SECRET: dev-webhook-secret
     # Dev draait via http; in productie blijft dit true.
     SCHED_SESSION_COOKIE_SECURE: "false"
   # Broncode gemount: na een codewijziging volstaat een herstart (geen rebuild).
@@ -103,8 +100,17 @@ services:
   scheduler:
     <<: *app
     command: ["scheduler"]
+    environment:
+      <<: *app-env
+      SCHED_OPENBAO_ADDR: http://openbao:8200
+      SCHED_WEBHOOK_OPENBAO_PATH: webhooks/default
+      SCHED_WEBHOOK_CACHE_S: "5" # kort in dev, zodat de rotatietest snel is
+    env_file:
+      - .dev/secrets/openbao/scheduler.env # AppRole sched-scheduler
     depends_on:
       migrate:
+        condition: service_completed_successfully
+      openbao-init:
         condition: service_completed_successfully
 
   worker:
@@ -113,26 +119,70 @@ services:
     stop_grace_period: 60s
     environment:
       <<: *app-env
-      SCHED_DEV_SECRETS_DIR: /secrets
+      SCHED_OPENBAO_ADDR: http://openbao:8200
       SCHED_ANSIBLE_HOST_KEY_CHECKING: "false"
       SCHED_POLL_INTERVAL_S: "1"
       # De fixture-repo is door een andere container aangemaakt.
       GIT_CONFIG_COUNT: "1"
       GIT_CONFIG_KEY_0: safe.directory
       GIT_CONFIG_VALUE_0: "*"
+    env_file:
+      - .dev/secrets/openbao/worker.env # AppRole sched-worker
     volumes:
       - ./app:/app/app:ro
       - ./migrations:/app/migrations:ro
       - runtime:/run/scheduler
+      - repocache:/var/cache/scheduler/repos
       - fixtures:/fixtures:ro
-      - ./.dev/secrets:/secrets:ro
     depends_on:
       migrate:
         condition: service_completed_successfully
       fixture-repo:
         condition: service_completed_successfully
+      openbao-init:
+        condition: service_completed_successfully
+      git-http:
+        condition: service_started
       ssh-target:
         condition: service_started
+
+  # Alleen dev: in-memory OpenBao. De inhoud komt uit openbao-init (dev/openbao/init.sh).
+  openbao:
+    image: quay.io/openbao/openbao:2.7.0
+    command: ["server", "-dev", "-dev-listen-address=0.0.0.0:8200"]
+    env_file:
+      - .dev/secrets/openbao/server.env # root-token, alleen dev
+    healthcheck:
+      test: ["CMD", "bao", "status", "-address=http://127.0.0.1:8200"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  openbao-init:
+    image: quay.io/openbao/openbao:2.7.0
+    entrypoint: ["sh", "/init/init.sh"]
+    env_file:
+      - .dev/secrets/openbao/init.env
+    volumes:
+      - ./dev/openbao:/init:ro
+      - ./.dev/secrets:/secrets:ro
+    depends_on:
+      openbao:
+        condition: service_healthy
+    restart: "no"
+
+  # Git over http met basic-auth (alleen lezen) voor projecten met een git_token.
+  git-http:
+    <<: *app
+    entrypoint: ["python", "/srv/server.py"]
+    command: []
+    volumes:
+      - ./dev/git-http:/srv:ro
+      - ./.dev/secrets/git:/secrets/git:ro
+      - fixtures:/fixtures:ro
+    depends_on:
+      fixture-repo:
+        condition: service_completed_successfully
 
   # Bouwt een bare git-repo uit tests/fixtures/repo in het fixtures-volume.
   fixture-repo:
@@ -171,18 +221,23 @@ services:
       SCHED_IT_API_URL: http://api:8000
       SCHED_IT_WEBHOOK_SINK: http://webhook-sink:8080
       SCHED_IT_KEYCLOAK: http://keycloak:8080
+      SCHED_IT_OPENBAO: http://openbao:8200
+      SCHED_IT_GIT_HTTP: http://git-http:8080
       GIT_CONFIG_COUNT: "1"
       GIT_CONFIG_KEY_0: safe.directory
       GIT_CONFIG_VALUE_0: "*"
     volumes:
       - .:/src
       - runtime:/run/scheduler:ro
+      - repocache:/var/cache/scheduler/repos:ro
       - fixtures:/fixtures:ro
       - ./.dev/secrets:/secrets:ro
 
 volumes:
   pgdata:
   fixtures:
+  # Gedeeld tussen workers (flock per project) en read-only met `dev` voor de tests.
+  repocache:
   # tmpfs, gedeeld tussen workers (en read-only met `dev` voor de cleanup-tests).
   runtime:
     driver_opts:

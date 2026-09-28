@@ -115,7 +115,7 @@ class Env:
             {
                 "name": unique("key"),
                 "type": "ssh_key",
-                "openbao_path": "ssh-target",
+                "openbao_path": "ssh/ssh-target",
                 "openbao_key": "id_ed25519",
             },
         )

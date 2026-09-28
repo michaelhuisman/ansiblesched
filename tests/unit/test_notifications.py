@@ -6,17 +6,16 @@ from types import SimpleNamespace
 
 import httpx
 import pytest
-from pydantic import SecretStr
 
 from app.core.auth import Action, Principal
 from app.services.notifications import (
     SIGNATURE_HEADER,
+    WebhookConfig,
     _send,
     backoff,
     build_payload,
     fingerprint,
     sign,
-    targets,
 )
 
 URL = "https://hooks.example.invalid/services/T000/B000/secret-token-123"
@@ -48,8 +47,19 @@ def test_fingerprint_is_stable_and_hides_url() -> None:
     assert fingerprint(URL + "x") != fp
 
 
-def test_targets_map_fingerprint_to_url() -> None:
-    assert targets([SecretStr(URL)]) == {fingerprint(URL): URL}
+def test_webhook_config_from_secret() -> None:
+    config = WebhookConfig.from_secret({"urls": f'["{URL}"]', "hmac_secret": "h"})
+    assert config.targets() == {fingerprint(URL): URL}
+    assert config.hmac_secret == "h"
+    assert "secret-token" not in repr(config)
+    assert "h'" not in repr(config)
+    assert WebhookConfig.from_secret({}).urls == ()
+
+
+@pytest.mark.parametrize("raw", ["not json", '{"a": 1}', "[1, 2]"])
+def test_webhook_config_rejects_bad_urls(raw: str) -> None:
+    with pytest.raises(ValueError, match="JSON list"):
+        WebhookConfig.from_secret({"urls": raw})
 
 
 def test_backoff_grows_and_caps() -> None:

@@ -6,10 +6,14 @@
 #   .dev/secrets/oidc.env                SCHED_OIDC_CLIENT_SECRET voor de api
 #   .dev/secrets/keycloak.env            bootstrap-admin voor de Keycloak-console
 #   .dev/keycloak/realm-scheduler.json   realm-import, gerenderd uit dev/keycloak/*.tpl
+#   .dev/secrets/openbao/*               root-token (alleen init + tests), AppRole-id's
+#   .dev/secrets/git/token               token voor de git-http-server
+#   .dev/secrets/webhook/hmac            HMAC-secret voor webhooks
 set -eu
 cd "$(dirname "$0")/.."
 dir=.dev/secrets
-mkdir -p "$dir/ssh-target" "$dir/vault" "$dir/keycloak" .dev/keycloak
+mkdir -p "$dir/ssh-target" "$dir/vault" "$dir/keycloak" "$dir/openbao" "$dir/git" \
+    "$dir/webhook" .dev/keycloak
 
 rand() { LC_ALL=C tr -dc 'A-Za-z0-9' </dev/urandom | head -c "${1:-32}"; }
 secret() {  # secret <bestand>: aanmaken als hij nog niet bestaat, dan uitlezen
@@ -35,6 +39,21 @@ sed -e "s/__CLIENT_SECRET__/$client_secret/" \
     dev/keycloak/realm-scheduler.json.tpl >.dev/keycloak/realm-scheduler.json
 printf 'SCHED_OIDC_CLIENT_SECRET=%s\n' "$client_secret" >"$dir/oidc.env"
 printf 'KC_BOOTSTRAP_ADMIN_USERNAME=admin\nKC_BOOTSTRAP_ADMIN_PASSWORD=%s\n' "$kc_admin" >"$dir/keycloak.env"
+
+secret "$dir/git/token" >/dev/null
+secret "$dir/webhook/hmac" >/dev/null
+root_token=$(secret "$dir/openbao/root-token")
+worker_role=$(secret "$dir/openbao/worker-role-id")
+worker_secret=$(secret "$dir/openbao/worker-secret-id")
+sched_role=$(secret "$dir/openbao/scheduler-role-id")
+sched_secret=$(secret "$dir/openbao/scheduler-secret-id")
+printf 'BAO_DEV_ROOT_TOKEN_ID=%s\n' "$root_token" >"$dir/openbao/server.env"
+printf 'BAO_TOKEN=%s\nWORKER_ROLE_ID=%s\nWORKER_SECRET_ID=%s\nSCHEDULER_ROLE_ID=%s\nSCHEDULER_SECRET_ID=%s\n' \
+    "$root_token" "$worker_role" "$worker_secret" "$sched_role" "$sched_secret" >"$dir/openbao/init.env"
+printf 'SCHED_OPENBAO_ROLE_ID=%s\nSCHED_OPENBAO_SECRET_ID=%s\n' "$worker_role" "$worker_secret" \
+    >"$dir/openbao/worker.env"
+printf 'SCHED_OPENBAO_ROLE_ID=%s\nSCHED_OPENBAO_SECRET_ID=%s\n' "$sched_role" "$sched_secret" \
+    >"$dir/openbao/scheduler.env"
 
 # De containers draaien onder andere uid's; dit zijn uitsluitend dev-secrets.
 chmod -R a+rX .dev

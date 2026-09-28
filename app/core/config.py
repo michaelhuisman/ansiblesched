@@ -19,10 +19,6 @@ class Settings(BaseSettings):
     api_host: str = "0.0.0.0"  # noqa: S104 - luistert binnen de container
     api_port: int = 8000
 
-    # Fase 1: credentials worden als bestand gelezen uit
-    # <dev_secrets_dir>/<openbao_path>/<openbao_key>. Vervalt met OpenBao in fase 4.
-    dev_secrets_dir: Path | None = None
-
     ansible_host_key_checking: bool = True
 
     scheduler_lock_retry_s: float = 10.0
@@ -31,10 +27,17 @@ class Settings(BaseSettings):
 
     # Basis-URL voor links in notificaties, bv. https://scheduler.example.org
     public_url: str = "http://localhost:8000"
-    # JSON-lijst. Webhook-URL's bevatten vaak een token: SecretStr, nooit loggen of in de
-    # database. In fase 4 naar OpenBao.
-    webhook_urls: list[SecretStr] = Field(default_factory=list)
-    webhook_secret: SecretStr | None = None
+    # Webhook-URL's en de HMAC-secret staan in OpenBao (keys `urls` en `hmac_secret`).
+    # Leeg = geen webhooks. Alleen de scheduler leest dit pad.
+    webhook_openbao_path: str | None = None
+    webhook_cache_s: float = 60.0
+
+    # --- OpenBao (AppRole) ---
+    openbao_addr: str | None = None
+    openbao_role_id: str | None = None
+    openbao_secret_id: SecretStr | None = None
+    openbao_kv_mount: str = "secret"
+    openbao_ca_cert: Path | None = None  # CA-bundle voor TLS; leeg = systeem-CA's
 
     # --- auth ---
     auth_local_enabled: bool = True
@@ -52,6 +55,10 @@ class Settings(BaseSettings):
     oidc_client_secret: SecretStr | None = None
     # Verwachte `aud` in access tokens; default de client-id.
     oidc_audience: str | None = None
+
+    @property
+    def openbao_enabled(self) -> bool:
+        return bool(self.openbao_addr and self.openbao_role_id and self.openbao_secret_id)
 
     @property
     def oidc_enabled(self) -> bool:

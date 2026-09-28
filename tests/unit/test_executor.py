@@ -1,6 +1,6 @@
 """Executor-tests zonder database en zonder echte ansible-runner."""
 
-from collections.abc import Iterator
+from collections.abc import Iterator, Mapping
 from contextlib import contextmanager
 from pathlib import Path
 from types import SimpleNamespace
@@ -11,8 +11,9 @@ import pytest
 from app.core.config import Settings
 from app.models import RunStatus
 from app.worker import executor as executor_mod
-from app.worker.credentials import CredentialRef, DevFileResolver
+from app.worker.credentials import CredentialError, CredentialRef, GitAuth
 from app.worker.executor import Executor, RunSpec
+from app.worker.git import GitError
 
 SHA = "a" * 40
 
@@ -20,14 +21,38 @@ SHA = "a" * 40
 class FakeRepos:
     def __init__(self) -> None:
         self.pruned: list[int] = []
+        self.auth: GitAuth | None = None
+        self.fail_with: str | None = None
 
-    def checkout(self, project_id: int, git_url: str, branch: str, dest: Path) -> str:
+    def checkout(
+        self,
+        project_id: int,
+        git_url: str,
+        branch: str,
+        dest: Path,
+        *,
+        auth: GitAuth | None = None,
+        auth_dir: Path | None = None,
+    ) -> str:
+        self.auth = auth
+        if self.fail_with:
+            raise GitError(self.fail_with)
         dest.mkdir()
         (dest / "ping.yml").write_text("- hosts: all\n")
         return SHA
 
     def prune(self, project_id: int) -> None:
         self.pruned.append(project_id)
+
+
+class FakeResolver:
+    def __init__(self, secrets: dict[str, dict[str, str]]) -> None:
+        self.secrets = secrets
+
+    def fields(self, ref: CredentialRef) -> Mapping[str, str]:
+        if ref.openbao_path not in self.secrets:
+            raise CredentialError(f"credential {ref.id}: secret not found: {ref.openbao_path}")
+        return self.secrets[ref.openbao_path]
 
 
 class Recorder:
@@ -69,11 +94,13 @@ def _spec(**overrides: Any) -> RunSpec:
 def env(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> SimpleNamespace:
     runtime = tmp_path / "runtime"
     runtime.mkdir()
-    secrets = tmp_path / "secrets"
-    (secrets / "ssh").mkdir(parents=True)
-    (secrets / "ssh" / "key").write_text("PRIVATE-KEY-CONTENT-123\n")
-    (secrets / "vault").mkdir()
-    (secrets / "vault" / "pw").write_text("vault-password-456")
+    resolver = FakeResolver(
+        {
+            "ssh": {"key": "PRIVATE-KEY-CONTENT-123\n"},
+            "vault": {"pw": "vault-password-456"},
+            "git/repo": {"token": "GIT-TOKEN-789", "username": "deploy"},
+        }
+    )
 
     rec = Recorder()
     spec_holder: dict[str, RunSpec] = {"spec": _spec()}
@@ -91,7 +118,7 @@ def env(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> SimpleNamespace:
         return Executor(
             settings,
             _dummy_session,  # type: ignore[arg-type]
-            DevFileResolver(secrets),
+            resolver,
             repos,  # type: ignore[arg-type]
             runner_fn=runner_fn,
         )
@@ -210,3 +237,27 @@ def test_secrets_are_masked_in_events(env: SimpleNamespace) -> None:
 
     env.make(fake_runner).execute(5)
     assert "PRIVATE-KEY-CONTENT-123" not in env.rec.events[0]["stdout"]
+
+
+def test_git_credential_is_passed_and_masked(env: SimpleNamespace) -> None:
+    env.spec["spec"] = _spec(git_credential=CredentialRef(3, "git_token", "git/repo", "token"))
+
+    def fake_runner(**kwargs: Any) -> SimpleNamespace:
+        kwargs["event_handler"]({"counter": 1, "event": "verbose", "stdout": "x GIT-TOKEN-789 y"})
+        return _runner_result("successful", 0)
+
+    assert env.make(fake_runner).execute(5) == RunStatus.SUCCESSFUL
+    assert env.repos.auth == GitAuth("deploy", "GIT-TOKEN-789")
+    assert "GIT-TOKEN-789" not in repr(env.repos.auth)
+    assert "GIT-TOKEN-789" not in env.rec.events[0]["stdout"]
+
+
+def test_git_failure_is_setup_error_without_token(env: SimpleNamespace) -> None:
+    env.spec["spec"] = _spec(git_credential=CredentialRef(3, "git_token", "git/repo", "token"))
+    env.repos.fail_with = "git fetch failed: auth for GIT-TOKEN-789 rejected"
+    status = env.make(lambda **_: pytest.fail("runner must not start")).execute(5)
+    assert status == RunStatus.ERROR
+    reason = env.rec.finished["reason"]
+    assert reason.startswith("git fetch failed")
+    assert "GIT-TOKEN-789" not in reason
+    assert not (env.runtime / "5").exists()
