@@ -13,6 +13,14 @@
     policy: "{{ lamplighter_pull }}"
   when: lamplighter_pull != 'never'
 
+# lamplighter_pull=never only concerns the (preloaded) lamplighter image.
+- name: Pull the Postgres image
+  community.docker.docker_compose_v2_pull:
+    project_src: "{{ lamplighter_dir }}"
+    services: [postgres]
+    policy: missing
+  when: lamplighter_pull == 'never'
+
 - name: Start Postgres
   community.docker.docker_compose_v2:
     project_src: "{{ lamplighter_dir }}"
