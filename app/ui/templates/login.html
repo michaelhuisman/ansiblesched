@@ -2,6 +2,7 @@
 {% block title %}Sign in · lamplighter{% endblock %}
 {% block content %}
 <div class="login">
+  <div class="login-logo">{% with logo_class='login-logo-img' %}{% include "_logo.html" %}{% endwith %}</div>
   <h1>Sign in</h1>
   {% if error %}<p class="error">{{ error }}</p>{% endif %}
   {% if local_login %}
