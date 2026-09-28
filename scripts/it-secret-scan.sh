@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
 # Secret-scan van de containerlogs (draait op de host; de dev-container heeft geen
-# toegang tot `podman logs`). Zoekt alle dev-secrets uit .dev/secrets in de logs van de
+# toegang tot de containerlogs). Zoekt alle dev-secrets uit .dev/secrets in de logs van de
 # app-containers. De OpenBao-dev-server zelf valt erbuiten: die print zijn root-token.
 #
 # Draai na de integratietests, zodat de logs runs met al deze secrets bevatten.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-COMPOSE="podman compose -f compose.dev.yml"
+. scripts/lib.sh
 SERVICES="api worker scheduler migrate"
 dir=.dev/secrets
 

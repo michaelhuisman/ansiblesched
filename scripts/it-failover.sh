@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Failover-test (draait op de host; de dev-container kan geen containers killen).
 #
-# Vereist: podman compose -f compose.dev.yml up -d --scale scheduler=2 --scale worker=2
+# Vereist: <podman|docker> compose -f compose.dev.yml up -d --scale scheduler=2 --scale worker=2
 #
 # 1. Maakt een template en een schedule `* * * * *`.
 # 2. Killt de scheduler-leider hard (SIGKILL), vlak vóór een minuutgrens.
@@ -11,7 +11,7 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 
 API=${LAMPLIGHTER_IT_API_URL:-http://127.0.0.1:8000}/api/v1
-COMPOSE="podman compose -f compose.dev.yml"
+. scripts/lib.sh
 NS_SCHEDULER=$((0x5343))
 
 sql() { $COMPOSE exec -T postgres psql -U lamplighter -d lamplighter -Atc "$1" 2>/dev/null; }
@@ -54,7 +54,7 @@ echo "leider: $old"
 while [ "$(date -u +%S)" -ne 55 ]; do sleep 0.5; done
 boundary=$(date -u -v+1M +%Y-%m-%dT%H:%M:00 2>/dev/null || date -u -d '+1 min' +%Y-%m-%dT%H:%M:00)
 killed_at=$(date +%s)
-podman kill "$container" >/dev/null
+$CONTAINER kill "$container" >/dev/null
 echo "leider gekild om $(date -u +%T), minuutgrens $boundary"
 
 new=""

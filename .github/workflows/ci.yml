@@ -1,0 +1,130 @@
+# CI: lint, unit, integratie (tegen compose.dev.yml met Docker) en het runtime-image naar
+# GHCR. Actions zijn op commit-SHA vastgezet; de tag staat erachter als commentaar.
+name: ci
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  PYTHON_VERSION: "3.12"
+  IMAGE: ghcr.io/${{ github.repository_owner }}/lamplighter
+
+jobs:
+  lint:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+          cache-dependency-path: requirements*.txt
+      - run: pip install -r requirements-dev.txt
+      - run: ruff check .
+      - run: ruff format --check .
+      - run: mypy app
+
+  unit:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+          cache-dependency-path: requirements*.txt
+      - run: pip install -r requirements-dev.txt
+      - run: pytest tests/unit -q
+
+  integration:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    env:
+      CONTAINER: docker
+      COMPOSE: docker compose -f compose.dev.yml
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Dev-secrets genereren (alleen voor deze runner)
+        run: ./scripts/dev-keys.sh
+      - name: Stack starten
+        run: $COMPOSE up -d --build --scale worker=2 --scale scheduler=2
+      - name: Wachten op keycloak en api
+        run: |
+          for i in $(seq 1 90); do
+            kc=$(docker inspect lamplighter-keycloak-1 --format '{{.State.Health.Status}}' 2>/dev/null || true)
+            if [ "$kc" = healthy ] && curl -sf http://127.0.0.1:8000/readyz >/dev/null; then
+              echo "stack klaar na $((i * 3))s"; exit 0
+            fi
+            sleep 3
+          done
+          $COMPOSE ps -a
+          exit 1
+      - name: Integratietests
+        run: $COMPOSE run --rm dev pytest tests/integration -m "not slow" -q -rfs
+      - name: Trage tests (echte cron-afvuringen)
+        run: $COMPOSE run --rm dev pytest tests/integration -m slow -q -rfs
+      - name: Failover (kill van de scheduler-leider)
+        run: ./scripts/it-failover.sh
+      - name: Secret-scan van de containerlogs
+        run: ./scripts/it-secret-scan.sh
+      - name: Containerlogs bij een fout
+        if: failure()
+        run: $COMPOSE logs --no-color > compose-logs.txt 2>&1 || true
+      - name: Logs bewaren
+        if: failure()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: compose-logs
+          path: compose-logs.txt
+          retention-days: 7
+
+  image:
+    # Alleen na groene tests, en alleen voor main en versietags (niet voor PR's).
+    needs: [lint, unit, integration]
+    if: github.event_name == 'push'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+      - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - id: meta
+        uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
+        with:
+          images: ${{ env.IMAGE }}
+          tags: |
+            type=sha,format=long,prefix=
+            type=raw,value=latest,enable={{is_default_branch}}
+            type=semver,pattern={{version}}
+          labels: |
+            org.opencontainers.image.title=lamplighter
+            org.opencontainers.image.description=Runs Ansible playbooks on a schedule and on demand
+      - uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          target: runtime
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
