@@ -29,8 +29,8 @@ echo "$out" | tail -4
 echo "$out" | grep -Eq 'changed=0 +unreachable=0 +failed=0' || fail "role is not idempotent"
 
 step "3. admin, token and a long run"
-LC_ALL=C tr -dc 'A-Za-z0-9' </dev/urandom | head -c 24 |
-    compose run --rm -T --no-deps api create-user deploy-test --role admin >/dev/null
+# Not via `tr </dev/urandom | head`: with pipefail tr's broken pipe fails the script.
+openssl rand -hex 16 | compose run --rm -T --no-deps api create-user deploy-test --role admin >/dev/null
 TOKEN=$(compose run --rm -T --no-deps api create-token deploy-test --name ci --expires-days 1 |
     grep '^lamplighter_')
 [ -n "$TOKEN" ] || fail "no API token"
