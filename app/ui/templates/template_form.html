@@ -7,6 +7,7 @@
 </div>
 {% if errors.get('__all__') %}<p class="error">{{ errors['__all__'] }}</p>{% endif %}
 <form class="card form" method="post" action="{{ '/ui/templates/' ~ item.id if item else '/ui/templates' }}">
+  {% include "_csrf.html" %}
   <label>Naam <input name="name" value="{{ form.get('name') or '' }}" required>
     {% with field='name' %}{% include "_field_error.html" %}{% endwith %}</label>
   <div class="row">

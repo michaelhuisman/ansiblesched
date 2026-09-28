@@ -6,97 +6,35 @@ pydantic-schema's als de API.
 
 import html
 import json
-from datetime import UTC, datetime, timedelta
-from pathlib import Path
+from datetime import UTC, datetime
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Depends, Form, Query, Request, status
-from fastapi.responses import HTMLResponse, RedirectResponse, Response
-from fastapi.templating import Jinja2Templates
-from pydantic import BaseModel, ValidationError
+from fastapi import APIRouter, Form, Query, Request
+from fastapi.responses import HTMLResponse, Response
 
-from app.api.deps import SessionDep, require
+from app.api.deps import SessionDep
 from app.api.schemas import LaunchIn, ScheduleIn, TemplateIn
-from app.core.auth import Action, Principal
+from app.core.auth import Principal
 from app.models import Credential, Inventory, Project, Schedule, Template
-from app.models.run import FINAL_STATUSES, RunStatus
+from app.models.run import RunStatus
 from app.scheduler.trigger import build_trigger, next_fire_time
 from app.services import crud, runs, schedules
 from app.services.errors import ServiceError
-
-TEMPLATES_DIR = Path(__file__).parent / "templates"
-STATIC_DIR = Path(__file__).parent / "static"
-
-templates = Jinja2Templates(directory=TEMPLATES_DIR)
-templates.env.globals["Action"] = Action
-templates.env.globals["FINAL_STATUSES"] = {s.value for s in FINAL_STATUSES}
-
-
-def _fmt_dt(value: datetime | None) -> str:
-    return value.astimezone(UTC).strftime("%Y-%m-%d %H:%M:%S") if value else ""
-
-
-def _fmt_duration(start: datetime | None, end: datetime | None) -> str:
-    if start is None:
-        return ""
-    total = int(((end or datetime.now(UTC)) - start) / timedelta(seconds=1))
-    minutes, seconds = divmod(max(total, 0), 60)
-    hours, minutes = divmod(minutes, 60)
-    return f"{hours}h{minutes:02d}m" if hours else f"{minutes}m{seconds:02d}s"
-
-
-templates.env.filters["dt"] = _fmt_dt
-templates.env.globals["duration"] = _fmt_duration
+from app.ui.common import (
+    CanCancel,
+    CanConfigure,
+    CanLaunch,
+    CanRead,
+    FormData,
+    actor,
+    clean,
+    parse_json,
+    redirect,
+    render,
+    validate,
+)
 
 router = APIRouter(prefix="/ui", include_in_schema=False)
-
-CanLaunch = Annotated[Principal, Depends(require(Action.LAUNCH))]
-CanCancel = Annotated[Principal, Depends(require(Action.CANCEL))]
-CanConfigure = Annotated[Principal, Depends(require(Action.CONFIGURE))]
-CanRead = Annotated[Principal, Depends(require(Action.READ))]
-
-# Formulieren sturen alles als string; lege velden worden None.
-FormData = dict[str, Any]
-
-
-def render(
-    request: Request, name: str, user: Principal, code: int = 200, **ctx: Any
-) -> HTMLResponse:
-    return templates.TemplateResponse(
-        request, name, {"user": user, "now": datetime.now(UTC), **ctx}, status_code=code
-    )
-
-
-def redirect(url: str) -> Response:
-    return RedirectResponse(url, status_code=status.HTTP_303_SEE_OTHER)
-
-
-def _clean(form: FormData) -> FormData:
-    return {k: (v.strip() if isinstance(v, str) else v) or None for k, v in form.items()}
-
-
-def _parse_json(value: str | None, field: str, errors: dict[str, str]) -> dict[str, Any]:
-    if not value:
-        return {}
-    try:
-        parsed = json.loads(value)
-    except json.JSONDecodeError as exc:
-        errors[field] = f"ongeldige JSON: {exc.msg}"
-        return {}
-    if not isinstance(parsed, dict):
-        errors[field] = "moet een JSON-object zijn"
-        return {}
-    return parsed
-
-
-def _validate[S: BaseModel](schema: type[S], data: FormData, errors: dict[str, str]) -> S | None:
-    try:
-        return schema.model_validate(data)
-    except ValidationError as exc:
-        for err in exc.errors():
-            field = str(err["loc"][0]) if err["loc"] else "__all__"
-            errors.setdefault(field, err["msg"].removeprefix("Value error, "))
-        return None
 
 
 # --- runs ------------------------------------------------------------------
@@ -146,7 +84,7 @@ def run_meta(request: Request, run_id: int, session: SessionDep, user: CanRead) 
 def run_cancel(request: Request, run_id: int, session: SessionDep, user: CanCancel) -> HTMLResponse:
     error = None
     try:
-        runs.cancel(session, run_id)
+        runs.cancel(session, run_id, actor=actor(request, user))
     except ServiceError as exc:
         error = str(exc)
     ctx = _run_context(session, run_id)
@@ -208,16 +146,18 @@ def _save_template(
     request: Request, session: SessionDep, user: Principal, form: FormData, template_id: int | None
 ) -> Response:
     errors: dict[str, str] = {}
-    data = _clean(form)
-    data["extra_vars"] = _parse_json(data.get("extra_vars"), "extra_vars", errors)
+    data = clean(form)
+    data["extra_vars"] = parse_json(data.get("extra_vars"), "extra_vars", errors)
     data["verbosity"] = data.get("verbosity") or 0
-    parsed = _validate(TemplateIn, data, errors)
+    parsed = validate(TemplateIn, data, errors)
     if parsed is not None and not errors:
         try:
             if template_id is None:
-                crud.create(session, Template, parsed.model_dump())
+                crud.create(session, Template, parsed.model_dump(), actor=actor(request, user))
             else:
-                crud.update(session, Template, template_id, parsed.model_dump())
+                crud.update(
+                    session, Template, template_id, parsed.model_dump(), actor=actor(request, user)
+                )
         except ServiceError as exc:
             errors["__all__"] = str(exc)
         else:
@@ -254,7 +194,7 @@ def template_delete(
     request: Request, template_id: int, session: SessionDep, user: CanConfigure
 ) -> Response:
     try:
-        crud.delete(session, Template, template_id)
+        crud.delete(session, Template, template_id, actor=actor(request, user))
     except ServiceError as exc:
         return HTMLResponse(f'<span class="error">{html.escape(str(exc))}</span>', status_code=409)
     return HTMLResponse("", headers={"HX-Refresh": "true"})
@@ -278,8 +218,8 @@ def template_launch(
     limit: Annotated[str, Form()] = "",
 ) -> Response:
     errors: dict[str, str] = {}
-    parsed_vars = _parse_json(extra_vars.strip(), "extra_vars", errors)
-    body = _validate(LaunchIn, {"extra_vars": parsed_vars, "limit": limit.strip() or None}, errors)
+    parsed_vars = parse_json(extra_vars.strip(), "extra_vars", errors)
+    body = validate(LaunchIn, {"extra_vars": parsed_vars, "limit": limit.strip() or None}, errors)
     if body is None or errors:
         item = crud.get(session, Template, template_id)
         form = {"extra_vars": extra_vars, "limit": limit}
@@ -292,6 +232,7 @@ def template_launch(
         triggered_by=user.triggered_by,
         extra_vars=body.extra_vars,
         limit=body.limit,
+        actor=actor(request, user),
     )
     return redirect(f"/ui/runs/{run.id}")
 
@@ -354,20 +295,22 @@ def _save_schedule(
     request: Request, session: SessionDep, user: Principal, form: FormData, schedule_id: int | None
 ) -> Response:
     errors: dict[str, str] = {}
-    data = _clean(form)
+    data = clean(form)
     data["enabled"] = form.get("enabled") == "on"
-    data["extra_vars_override"] = _parse_json(
+    data["extra_vars_override"] = parse_json(
         data.get("extra_vars_override"), "extra_vars_override", errors
     )
     data["misfire_grace_s"] = data.get("misfire_grace_s") or 60
     data["timezone"] = data.get("timezone") or "UTC"
-    parsed = _validate(ScheduleIn, data, errors)
+    parsed = validate(ScheduleIn, data, errors)
     if parsed is not None and not errors:
         try:
             if schedule_id is None:
-                crud.create(session, Schedule, parsed.model_dump())
+                crud.create(session, Schedule, parsed.model_dump(), actor=actor(request, user))
             else:
-                crud.update(session, Schedule, schedule_id, parsed.model_dump())
+                crud.update(
+                    session, Schedule, schedule_id, parsed.model_dump(), actor=actor(request, user)
+                )
             schedules.notify_changed(session)
         except ServiceError as exc:
             errors["__all__"] = str(exc)
@@ -405,7 +348,9 @@ def schedule_toggle(
     request: Request, schedule_id: int, session: SessionDep, user: CanConfigure
 ) -> HTMLResponse:
     item = crud.get(session, Schedule, schedule_id)
-    item = crud.update(session, Schedule, schedule_id, {"enabled": not item.enabled})
+    item = crud.update(
+        session, Schedule, schedule_id, {"enabled": not item.enabled}, actor=actor(request, user)
+    )
     schedules.notify_changed(session)
     names = {t.id: t.name for t in crud.list_all(session, Template)}
     return render(
@@ -422,6 +367,6 @@ def schedule_toggle(
 def schedule_delete(
     request: Request, schedule_id: int, session: SessionDep, user: CanConfigure
 ) -> HTMLResponse:
-    crud.delete(session, Schedule, schedule_id)
+    crud.delete(session, Schedule, schedule_id, actor=actor(request, user))
     schedules.notify_changed(session)
     return HTMLResponse("")

@@ -9,7 +9,7 @@ import httpx
 from app.core.config import get_settings
 from app.core.db import get_sessionmaker
 from app.scheduler.trigger import build_trigger, latest_fire_time
-from app.services import notifications, schedules
+from app.services import notifications, schedules, sessions
 
 log = logging.getLogger(__name__)
 
@@ -92,3 +92,14 @@ def deliver_notifications() -> None:
             public_url=settings.public_url,
             secret=secret,
         )
+
+
+SESSION_PURGE_JOB_ID = "internal:purge-sessions"
+SESSION_PURGE_INTERVAL_S = 3600
+
+
+def purge_sessions() -> None:
+    with get_sessionmaker()() as session:
+        removed = sessions.purge_expired(session)
+    if removed:
+        log.info("expired sessions purged", extra={"count": removed})

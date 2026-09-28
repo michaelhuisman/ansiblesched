@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+{% block title %}Inloggen · ansible-scheduler{% endblock %}
+{% block content %}
+<div class="login">
+  <h1>Inloggen</h1>
+  {% if error %}<p class="error">{{ error }}</p>{% endif %}
+  {% if local_login %}
+  <form class="card form" method="post" action="/ui/login">
+    <input type="hidden" name="next" value="{{ next }}">
+    <label>Gebruikersnaam <input name="username" value="{{ username or '' }}" autocomplete="username" autofocus required></label>
+    <label>Wachtwoord <input name="password" type="password" autocomplete="current-password" required></label>
+    <div class="form-actions"><button type="submit">Inloggen</button></div>
+  </form>
+  {% endif %}
+  {% if oidc_login %}
+    {% if local_login %}<p class="divider"><span>of</span></p>{% endif %}
+    <a class="button wide" href="/ui/auth/oidc/start?next={{ next | urlencode }}">Inloggen met Keycloak</a>
+  {% endif %}
+  {% if not local_login and not oidc_login %}<p class="error">Er is geen inlogmethode geconfigureerd.</p>{% endif %}
+</div>
+{% endblock %}

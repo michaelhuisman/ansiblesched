@@ -1,17 +1,21 @@
 import logging
+from urllib.parse import quote
 
 from fastapi import APIRouter, FastAPI, Request, status
-from fastapi.responses import JSONResponse, RedirectResponse, Response
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
 from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
 
-from app.api.routers import config, runs
+from app.api.routers import auth, config, runs
+from app.core.auth import NotAuthenticatedError, PermissionDeniedError
 from app.core.db import get_engine, get_sessionmaker
 from app.services.errors import ConflictError, InvalidReferenceError, NotFoundError, ServiceError
 from app.services.metrics import build_registry
+from app.ui import auth_routes as ui_auth
 from app.ui import routes as ui
+from app.ui.common import STATIC_DIR
 
 log = logging.getLogger(__name__)
 
@@ -27,17 +31,51 @@ async def _service_error(_request: Request, exc: Exception) -> JSONResponse:
     return JSONResponse(status_code=code, content={"detail": str(exc)})
 
 
+def _is_ui(request: Request) -> bool:
+    return request.url.path.startswith("/ui")
+
+
+async def _not_authenticated(request: Request, exc: Exception) -> Response:
+    if _is_ui(request):
+        target = request.url.path + (f"?{request.url.query}" if request.url.query else "")
+        login = f"/ui/login?next={quote(target, safe='')}"
+        if request.headers.get("HX-Request") == "true":
+            return Response(status_code=200, headers={"HX-Redirect": login})
+        return RedirectResponse(login, status_code=status.HTTP_303_SEE_OTHER)
+    return JSONResponse(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        content={"detail": str(exc)},
+        headers={"WWW-Authenticate": "Bearer"},
+    )
+
+
+async def _permission_denied(request: Request, exc: Exception) -> Response:
+    if _is_ui(request):
+        return HTMLResponse(
+            "<!doctype html><title>Geen toegang</title>"
+            '<link rel="stylesheet" href="/ui/static/app.css">'
+            '<main><h1>Geen toegang</h1><p class="muted">Je hebt hiervoor niet de juiste rol.</p>'
+            '<p><a href="/ui/runs">Terug</a></p></main>',
+            status_code=status.HTTP_403_FORBIDDEN,
+        )
+    return JSONResponse(status_code=status.HTTP_403_FORBIDDEN, content={"detail": str(exc)})
+
+
 def create_app() -> FastAPI:
     app = FastAPI(title="ansible-scheduler", version="0.1.0")
     app.add_exception_handler(ServiceError, _service_error)
+    app.add_exception_handler(NotAuthenticatedError, _not_authenticated)
+    app.add_exception_handler(PermissionDeniedError, _permission_denied)
 
     v1 = APIRouter(prefix="/api/v1")
     for router in config.routers:
         v1.include_router(router)
     v1.include_router(runs.router)
+    v1.include_router(auth.router)
     app.include_router(v1)
     app.include_router(ui.router)
-    app.mount("/ui/static", StaticFiles(directory=ui.STATIC_DIR), name="static")
+    app.include_router(ui_auth.router)
+    app.mount("/ui/static", StaticFiles(directory=STATIC_DIR), name="static")
     registry = build_registry(get_sessionmaker())
 
     @app.get("/", include_in_schema=False)

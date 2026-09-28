@@ -188,3 +188,74 @@ class RunEventOut(OrmModel):
 class RunEventsPage(BaseModel):
     items: list[RunEventOut]
     next_after_seq: int | None
+
+
+# --- auth ------------------------------------------------------------------
+
+Role = Literal["viewer", "operator", "admin"]
+
+
+class MeOut(BaseModel):
+    subject: str
+    display_name: str | None
+    source: str
+    roles: list[str]
+    via: str
+
+
+class UserOut(OrmModel):
+    id: int
+    source: Literal["local", "oidc"]
+    username: str
+    display_name: str | None
+    email: str | None
+    roles: list[str]
+    disabled: bool
+    created_at: datetime
+    last_login_at: datetime | None
+
+
+class UserCreate(BaseModel):
+    username: str = Field(min_length=2, max_length=64)
+    password: str = Field(min_length=12, max_length=1024)
+    roles: list[Role] = Field(default_factory=list)
+    display_name: str | None = None
+
+
+class UserUpdate(BaseModel):
+    roles: list[Role] | None = None
+    disabled: bool | None = None
+    display_name: str | None = None
+
+
+class PasswordIn(BaseModel):
+    password: str = Field(min_length=12, max_length=1024)
+
+
+class TokenCreate(BaseModel):
+    name: str = Field(min_length=1, max_length=100)
+    expires_days: int | None = Field(default=90, ge=1, le=365)
+
+
+class TokenOut(OrmModel):
+    id: int
+    name: str
+    prefix: str
+    created_at: datetime
+    expires_at: datetime | None
+    last_used_at: datetime | None
+
+
+class TokenCreated(TokenOut):
+    token: str = Field(description="Wordt alleen nu getoond")
+
+
+class AuditOut(OrmModel):
+    id: int
+    at: datetime
+    actor: str
+    action: str
+    object_type: str | None
+    object_id: str | None
+    details: dict[str, Any]
+    ip: str | None

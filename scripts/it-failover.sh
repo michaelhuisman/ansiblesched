@@ -15,7 +15,15 @@ COMPOSE="podman compose -f compose.dev.yml"
 NS_SCHEDULER=$((0x5343))
 
 sql() { $COMPOSE exec -T postgres psql -U scheduler -d scheduler -Atc "$1" 2>/dev/null; }
-post() { curl -sf -H 'content-type: application/json' -X POST "$API$1" -d "$2"; }
+
+# Lokale admin + API-token via de CLI (het wachtwoord is niet nodig en gaat via stdin).
+LC_ALL=C tr -dc 'A-Za-z0-9' </dev/urandom | head -c 24 |
+    $COMPOSE run --rm -T dev python -m app create-user it-failover --role admin >/dev/null 2>&1 || true
+TOKEN=$($COMPOSE run --rm -T dev python -m app create-token it-failover --name failover --expires-days 1 2>/dev/null | grep '^sched_')
+[ -n "$TOKEN" ] || { echo "FAIL: kon geen API-token aanmaken" >&2; exit 1; }
+AUTH="Authorization: Bearer $TOKEN"
+
+post() { curl -sf -H "$AUTH" -H 'content-type: application/json' -X POST "$API$1" -d "$2"; }
 field() { python3 -c "import json,sys; print(json.load(sys.stdin)['$1'])"; }
 leader() {
     sql "SELECT a.application_name FROM pg_locks l JOIN pg_stat_activity a USING (pid)
@@ -32,7 +40,7 @@ sched=$(post /schedules "{\"template_id\":$tpl,\"cron\":\"* * * * *\"}" | field 
 echo "schedule $sched aangemaakt"
 
 cleanup() {
-    curl -sf -X DELETE "$API/schedules/$sched" >/dev/null || true
+    curl -sf -H "$AUTH" -X DELETE "$API/schedules/$sched" >/dev/null || true
     $COMPOSE up -d --scale scheduler=2 --scale worker=2 >/dev/null 2>&1 || true
 }
 trap cleanup EXIT

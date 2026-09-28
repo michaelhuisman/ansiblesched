@@ -1,0 +1,68 @@
+{% extends "base.html" %}
+{% block title %}Account · ansible-scheduler{% endblock %}
+{% block content %}
+<div class="page-head"><h1>Account</h1></div>
+<section class="card">
+  <dl class="meta">
+    <div><dt>Naam</dt><dd>{{ user.label }}</dd></div>
+    <div><dt>Identiteit</dt><dd class="mono">{{ user.subject }}</dd></div>
+    <div><dt>Bron</dt><dd>{{ 'lokaal' if user.source == 'local' else 'Keycloak' }}</dd></div>
+    <div><dt>Rollen</dt><dd>{{ user.roles | sort | join(', ') or '–' }}</dd></div>
+  </dl>
+</section>
+
+{% if user.source == 'local' %}
+<h2 class="section">API-tokens</h2>
+{% if new_token %}
+  <div class="card notice">
+    <p><strong>Token "{{ new_token_name }}" aangemaakt.</strong> Kopieer hem nu, hij wordt niet meer getoond.</p>
+    <pre class="token mono">{{ new_token }}</pre>
+    <p class="muted">Gebruik: <span class="mono">Authorization: Bearer &lt;token&gt;</span></p>
+  </div>
+{% endif %}
+<table class="grid">
+  <thead><tr><th>Naam</th><th>Begint met</th><th>Aangemaakt</th><th>Verloopt</th><th>Laatst gebruikt</th><th></th></tr></thead>
+  <tbody>
+  {% for t in tokens %}
+    <tr>
+      <td>{{ t.name }}</td><td class="mono">{{ t.prefix }}…</td>
+      <td class="mono">{{ t.created_at | dt }}</td><td class="mono">{{ t.expires_at | dt or 'nooit' }}</td>
+      <td class="mono">{{ t.last_used_at | dt or '–' }}</td>
+      <td class="actions">
+        <form method="post" action="/ui/account/tokens/{{ t.id }}/revoke" class="inline"
+              onsubmit="return confirm('Deze token intrekken?')">
+          {% include "_csrf.html" %}<button class="small danger">Intrekken</button>
+        </form>
+      </td>
+    </tr>
+  {% else %}
+    <tr><td colspan="6" class="empty">Geen actieve tokens.</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+<form class="card form inline-form" method="post" action="/ui/account/tokens">
+  {% include "_csrf.html" %}
+  <div class="row">
+    <label>Naam <input name="name" placeholder="bv. ci-pipeline" required></label>
+    <label>Geldig (dagen)
+      <select name="expires_days">
+        {% for d in [7, 30, 90, 365] %}<option value="{{ d }}" {% if d == 90 %}selected{% endif %}>{{ d }}</option>{% endfor %}
+      </select></label>
+  </div>
+  {% if token_error %}<p class="error">{{ token_error }}</p>{% endif %}
+  <div class="form-actions"><button type="submit">Token aanmaken</button></div>
+</form>
+
+<h2 class="section">Wachtwoord wijzigen</h2>
+<form class="card form" method="post" action="/ui/account/password">
+  {% include "_csrf.html" %}
+  <label>Huidig wachtwoord <input name="current" type="password" autocomplete="current-password" required></label>
+  <label>Nieuw wachtwoord <input name="new" type="password" minlength="12" autocomplete="new-password" required>
+    <small class="muted">Minimaal 12 tekens. Daarna moet je opnieuw inloggen.</small></label>
+  {% if pw_error %}<p class="error">{{ pw_error }}</p>{% endif %}
+  <div class="form-actions"><button type="submit">Wijzigen</button></div>
+</form>
+{% else %}
+<p class="muted">Je account wordt beheerd in Keycloak. Voor de API gebruik je een access token van Keycloak.</p>
+{% endif %}
+{% endblock %}

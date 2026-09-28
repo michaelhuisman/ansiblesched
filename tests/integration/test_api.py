@@ -64,7 +64,7 @@ def test_launch_merges_extra_vars_and_limit(env: Env) -> None:
     run = env.launch(template, extra_vars={"b": 3})
     assert run["extra_vars"] == {"a": 1, "b": 3}
     assert run["limit"] == "ssh-target"
-    assert run["triggered_by"] == "user:anonymous"
+    assert run["triggered_by"] == "user:local:it-admin"
     env.wait(run["id"])
 
 

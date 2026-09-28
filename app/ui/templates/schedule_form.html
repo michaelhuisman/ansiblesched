@@ -7,6 +7,7 @@
 </div>
 {% if errors.get('__all__') %}<p class="error">{{ errors['__all__'] }}</p>{% endif %}
 <form class="card form" method="post" action="{{ '/ui/schedules/' ~ item.id if item else '/ui/schedules' }}">
+  {% include "_csrf.html" %}
   <label>Template
     <select name="template_id" required>
       <option value="">—</option>

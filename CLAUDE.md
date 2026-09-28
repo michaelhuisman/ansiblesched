@@ -16,6 +16,7 @@ aan een fase begint.
 - APScheduler 3.x met `SQLAlchemyJobStore` op Postgres
 - ansible-core (vastgepinde versie in `requirements.txt`) + ansible-runner
 - pydantic v2 + pydantic-settings voor config
+- PyJWT (OIDC/JWKS), argon2-cffi (wachtwoorden lokale gebruikers)
 - hvac voor OpenBao (vanaf fase 4)
 - pytest, ruff (lint + format), mypy (strict op `app/`)
 - Postgres 16
@@ -50,6 +51,8 @@ draait in de `dev`-container (Python 3.12, broncode gemount); lokaal is geen 3.1
 ```bash
 # dev-omgeving (eenmalig: scripts/dev-keys.sh)
 podman compose -f compose.dev.yml up -d --build --scale worker=2 --scale scheduler=2
+# eerste lokale admin (wachtwoord via prompt)
+podman compose -f compose.dev.yml run --rm dev python -m app create-user admin --role admin
 
 # kwaliteit, in de dev-container
 DEV="podman compose -f compose.dev.yml run --rm dev"

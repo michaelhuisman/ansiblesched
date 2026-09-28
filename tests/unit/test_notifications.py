@@ -8,7 +8,7 @@ import httpx
 import pytest
 from pydantic import SecretStr
 
-from app.core.auth import ANONYMOUS_ADMIN, Action, Principal
+from app.core.auth import Action, Principal
 from app.services.notifications import (
     SIGNATURE_HEADER,
     _send,
@@ -150,6 +150,7 @@ def test_send_unknown_target() -> None:
         ({"viewer"}, {Action.READ}),
         ({"operator"}, {Action.READ, Action.LAUNCH, Action.CANCEL}),
         ({"admin"}, set(Action)),
+        ({"operator", "admin"}, set(Action)),
         (set(), set()),
         ({"viewer", "operator"}, {Action.READ, Action.LAUNCH, Action.CANCEL}),
     ],
@@ -159,6 +160,9 @@ def test_principal_permissions(roles: set[str], allowed: set[Action]) -> None:
     assert {a for a in Action if user.can(a)} == allowed
 
 
-def test_anonymous_admin_in_phase_3() -> None:
-    assert ANONYMOUS_ADMIN.can(Action.CONFIGURE)
-    assert ANONYMOUS_ADMIN.triggered_by == "user:anonymous"
+def test_principal_identity() -> None:
+    local = Principal("local:alice", frozenset({"viewer"}))
+    assert local.triggered_by == "user:local:alice"
+    assert local.label == "alice"
+    assert not local.can(Action.MANAGE_USERS)
+    assert Principal("oidc:abc", display_name="Ada").label == "Ada"

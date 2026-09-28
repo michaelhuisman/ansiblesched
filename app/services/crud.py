@@ -10,6 +10,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.models import Entity
+from app.services import audit
 from app.services.errors import ConflictError, InvalidReferenceError, NotFoundError
 
 
@@ -46,30 +47,70 @@ def get[M: Entity](session: Session, model: type[M], obj_id: int) -> M:
     return obj
 
 
+def _label(obj: Entity) -> dict[str, Any]:
+    name = getattr(obj, "name", None)
+    return {"name": name} if name is not None else {}
+
+
 # Waarden komen uit gevalideerde pydantic-schema's (model_dump), vandaar Any.
-def create[M: Entity](session: Session, model: type[M], values: Mapping[str, Any]) -> M:
+def create[M: Entity](
+    session: Session,
+    model: type[M],
+    values: Mapping[str, Any],
+    *,
+    actor: audit.Actor | None = None,
+) -> M:
     obj = model(**values)
     with _translate_integrity_errors(session):
         session.add(obj)
         session.flush()
+        audit.record(
+            session,
+            actor,
+            f"{model.__tablename__}.create",
+            model.__tablename__,
+            obj.id,
+            _label(obj),
+        )
     session.refresh(obj)
     return obj
 
 
 def update[M: Entity](
-    session: Session, model: type[M], obj_id: int, values: Mapping[str, Any]
+    session: Session,
+    model: type[M],
+    obj_id: int,
+    values: Mapping[str, Any],
+    *,
+    actor: audit.Actor | None = None,
 ) -> M:
     obj = get(session, model, obj_id)
     with _translate_integrity_errors(session):
+        # Alleen veldnamen in de audit log, geen waarden.
+        changed = sorted(k for k, v in values.items() if getattr(obj, k) != v)
         for key, value in values.items():
             setattr(obj, key, value)
         session.flush()
+        audit.record(
+            session,
+            actor,
+            f"{model.__tablename__}.update",
+            model.__tablename__,
+            obj.id,
+            {**_label(obj), "changed": changed},
+        )
     session.refresh(obj)
     return obj
 
 
-def delete[M: Entity](session: Session, model: type[M], obj_id: int) -> None:
+def delete[M: Entity](
+    session: Session, model: type[M], obj_id: int, *, actor: audit.Actor | None = None
+) -> None:
     obj = get(session, model, obj_id)
+    label = _label(obj)
     with _translate_integrity_errors(session):
         session.delete(obj)
         session.flush()
+        audit.record(
+            session, actor, f"{model.__tablename__}.delete", model.__tablename__, obj_id, label
+        )

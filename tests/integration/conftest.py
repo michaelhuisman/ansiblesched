@@ -4,15 +4,21 @@ podman compose -f compose.dev.yml run --rm dev pytest tests/integration
 """
 
 import os
+import re
+import secrets
 import subprocess
 import time
 import uuid
 from collections.abc import Iterator
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
 import httpx
 import pytest
+
+from app.core.db import get_sessionmaker
+from app.services import api_tokens, users
 
 API_URL = os.environ.get("SCHED_IT_API_URL", "http://127.0.0.1:8000")
 FIXTURE_REPO = Path("/fixtures/repo.git")
@@ -24,14 +30,58 @@ INLINE_INVENTORY = "ssh-target ansible_user=ansible ansible_python_interpreter=/
 pytestmark = pytest.mark.integration
 
 
+@dataclass(frozen=True)
+class LocalUser:
+    username: str
+    password: str
+    token: str
+
+    @property
+    def headers(self) -> dict[str, str]:
+        return {"Authorization": f"Bearer {self.token}"}
+
+
+def ensure_local_user(username: str, roles: list[str]) -> LocalUser:
+    """Maak (of reset) een lokale testgebruiker met een vers wachtwoord en API-token."""
+    password = secrets.token_urlsafe(18)
+    with get_sessionmaker()() as s:
+        user = users.get_local(s, username)
+        if user is None:
+            user = users.create_local(s, username, password, roles)
+        else:
+            users.set_password(s, user.id, password)
+            user = users.update_local(s, user.id, roles=roles, disabled=False)
+        token = api_tokens.create(s, user, "integration tests", expires_days=1)
+    return LocalUser(username, password, token.raw)
+
+
 @pytest.fixture(scope="session")
-def api() -> Iterator[httpx.Client]:
-    with httpx.Client(base_url=f"{API_URL}/api/v1", timeout=10) as client:
-        try:
-            httpx.get(f"{API_URL}/readyz", timeout=5).raise_for_status()
-        except httpx.HTTPError as exc:
-            pytest.skip(f"API niet bereikbaar op {API_URL}: {exc}")
+def admin() -> LocalUser:
+    return ensure_local_user("it-admin", ["admin"])
+
+
+@pytest.fixture(scope="session")
+def api(admin: LocalUser) -> Iterator[httpx.Client]:
+    try:
+        httpx.get(f"{API_URL}/readyz", timeout=5).raise_for_status()
+    except httpx.HTTPError as exc:
+        pytest.skip(f"API niet bereikbaar op {API_URL}: {exc}")
+    with httpx.Client(base_url=f"{API_URL}/api/v1", timeout=10, headers=admin.headers) as client:
         yield client
+
+
+def login_ui(username: str, password: str) -> httpx.Client:
+    """UI-client met sessiecookie; stuurt het CSRF-token mee als header."""
+    client = httpx.Client(base_url=f"{API_URL}/ui", timeout=10, follow_redirects=False)
+    resp = client.post(
+        "/login", data={"username": username, "password": password, "next": "/ui/runs"}
+    )
+    assert resp.status_code == 303, resp.text
+    page = client.get("/runs").text
+    match = re.search(r'"X-CSRF-Token": "([^"]+)"', page)
+    assert match, "no CSRF token on page"
+    client.headers["X-CSRF-Token"] = match.group(1)
+    return client
 
 
 def unique(prefix: str) -> str:

@@ -1,0 +1,90 @@
+{
+  "realm": "scheduler",
+  "enabled": true,
+  "sslRequired": "none",
+  "accessTokenLifespan": 300,
+  "roles": {
+    "client": {
+      "ansible-scheduler": [
+        {"name": "viewer", "description": "Alleen lezen"},
+        {"name": "operator", "description": "Lezen, launchen en annuleren"},
+        {"name": "admin", "description": "Alles, inclusief configuratie en gebruikers"}
+      ]
+    }
+  },
+  "clients": [
+    {
+      "clientId": "ansible-scheduler",
+      "name": "ansible-scheduler",
+      "protocol": "openid-connect",
+      "publicClient": false,
+      "secret": "__CLIENT_SECRET__",
+      "standardFlowEnabled": true,
+      "directAccessGrantsEnabled": false,
+      "redirectUris": ["http://localhost:8000/ui/auth/callback"],
+      "webOrigins": ["http://localhost:8000"],
+      "attributes": {
+        "pkce.code.challenge.method": "S256",
+        "post.logout.redirect.uris": "http://localhost:8000/ui/login"
+      },
+      "protocolMappers": [
+        {
+          "name": "audience ansible-scheduler",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-audience-mapper",
+          "config": {
+            "included.client.audience": "ansible-scheduler",
+            "access.token.claim": "true",
+            "id.token.claim": "false"
+          }
+        }
+      ]
+    },
+    {
+      "clientId": "scheduler-tests",
+      "name": "Alleen voor integratietests (password grant)",
+      "protocol": "openid-connect",
+      "publicClient": true,
+      "standardFlowEnabled": false,
+      "directAccessGrantsEnabled": true,
+      "fullScopeAllowed": true,
+      "protocolMappers": [
+        {
+          "name": "audience ansible-scheduler",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-audience-mapper",
+          "config": {
+            "included.client.audience": "ansible-scheduler",
+            "access.token.claim": "true",
+            "id.token.claim": "false"
+          }
+        }
+      ]
+    }
+  ],
+  "users": [
+    {
+      "username": "kc-viewer", "enabled": true, "emailVerified": true,
+      "email": "kc-viewer@example.invalid", "firstName": "Vera", "lastName": "Viewer",
+      "credentials": [{"type": "password", "value": "__PW_VIEWER__", "temporary": false}],
+      "clientRoles": {"ansible-scheduler": ["viewer"]}
+    },
+    {
+      "username": "kc-operator", "enabled": true, "emailVerified": true,
+      "email": "kc-operator@example.invalid", "firstName": "Otto", "lastName": "Operator",
+      "credentials": [{"type": "password", "value": "__PW_OPERATOR__", "temporary": false}],
+      "clientRoles": {"ansible-scheduler": ["operator"]}
+    },
+    {
+      "username": "kc-admin", "enabled": true, "emailVerified": true,
+      "email": "kc-admin@example.invalid", "firstName": "Ada", "lastName": "Admin",
+      "credentials": [{"type": "password", "value": "__PW_ADMIN__", "temporary": false}],
+      "clientRoles": {"ansible-scheduler": ["admin"]}
+    },
+    {
+      "username": "kc-norole", "enabled": true, "emailVerified": true,
+      "email": "kc-norole@example.invalid", "firstName": "Nora", "lastName": "Norole",
+      "credentials": [{"type": "password", "value": "__PW_NOROLE__", "temporary": false}]
+    }
+  ]
+}

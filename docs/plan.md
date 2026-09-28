@@ -134,6 +134,23 @@ lopende run; de worker pikt dat op via `cancel_callback`.
 **run_events**
 id (bigserial), run_id, seq, event, host, task, created_at, stdout, data (jsonb, gefilterd)
 
+**users**
+id, source (`local` | `oidc`), username (bij OIDC: `sub`), display_name, email,
+password_hash (argon2id, alleen lokaal), roles (alleen lokaal), disabled,
+failed_logins, locked_until, created_at, last_login_at
+
+**sessions** (UI)
+id, token_hash (sha256 van het cookie-id), user_id, csrf_token, oidc_roles (snapshot bij
+login), created_at, last_seen_at, expires_at
+
+**api_tokens** (lokale gebruikers)
+id, user_id, name, token_hash (sha256), prefix, created_at, expires_at, last_used_at,
+revoked_at
+
+**audit_log**
+id, at, actor (`user:local:<naam>` | `user:oidc:<sub>` | `cli`), action, object_type,
+object_id, details (jsonb: veldnamen, geen waarden of secrets), ip
+
 **notifications** (outbox voor webhooks)
 id, run_id, target (fingerprint van de webhook-URL, nooit de URL zelf), event,
 status (`pending` | `sent` | `failed`), attempts, next_attempt_at, last_error,
@@ -181,7 +198,13 @@ POST  /api/v1/runs/{id}/cancel
 
 GET   /healthz                          liveness
 GET   /readyz                           db-connectie
-GET   /metrics                          Prometheus (fase 3)
+GET   /api/v1/me                        eigen identiteit en rollen
+GET/POST/DELETE /api/v1/tokens          eigen API-tokens (lokale gebruikers)
+GET/POST/PATCH  /api/v1/users           gebruikersbeheer (admin)
+PUT   /api/v1/users/{id}/password       wachtwoord resetten (admin)
+GET   /api/v1/audit                     audit log (admin)
+
+GET   /metrics                          Prometheus (fase 3; open, zie Open punten)
 
 GET   /ui/...                           server-rendered UI (Jinja2 + htmx)
 ```
@@ -205,11 +228,20 @@ GET   /ui/...                           server-rendered UI (Jinja2 + htmx)
 | `SCHED_PUBLIC_URL`      | `http://localhost:8000`        |
 | `SCHED_WEBHOOK_URLS`    | `[]` (JSON-lijst; fase 4 → OpenBao) |
 | `SCHED_WEBHOOK_SECRET`  | — (HMAC-SHA256-signatuur)      |
+| `SCHED_AUTH_LOCAL_ENABLED` | `true`                      |
+| `SCHED_SESSION_COOKIE_SECURE` | `true` (dev: `false`)    |
+| `SCHED_SESSION_IDLE_S`  | `28800` (8 uur)                |
+| `SCHED_SESSION_MAX_S`   | `86400` (24 uur)               |
+| `SCHED_LOGIN_MAX_FAILURES` | `5`                         |
+| `SCHED_LOGIN_LOCKOUT_S` | `900`                          |
+| `SCHED_OIDC_DISCOVERY_URL` | — (default: van issuer)     |
+| `SCHED_OIDC_CLIENT_ID`  | `ansible-scheduler`            |
+| `SCHED_OIDC_CLIENT_SECRET` | —                           |
 | `SCHED_OPENBAO_ADDR`    | — (fase 4)                     |
 | `SCHED_OPENBAO_ROLE_ID` | — (fase 4)                     |
 | `SCHED_OPENBAO_SECRET_ID` | — (fase 4)                   |
-| `SCHED_OIDC_ISSUER`     | — (fase 4)                     |
-| `SCHED_OIDC_AUDIENCE`   | — (fase 4)                     |
+| `SCHED_OIDC_ISSUER`     | — (leeg = alleen lokale login) |
+| `SCHED_OIDC_AUDIENCE`   | — (default: client-id)         |
 
 ## Dev-omgeving (`compose.dev.yml`)
 
@@ -296,6 +328,33 @@ queue-diepte, laatste succesvolle run per schedule) en webhook-notificaties bij
 
 ## Fase 4 — Secrets en auth
 
+_Geleverd in twee delen: **4a** auth (lokale gebruikers, API-tokens, Keycloak, RBAC,
+audit, CSRF) en **4b** OpenBao (credentials, git-tokens, webhook-URL's)._
+
+**Uitwerking 4a**
+- **Identiteiten:** lokale gebruikers (rollen in de DB, argon2id, lockout na 5 fouten)
+  en Keycloak-gebruikers (rollen uit de token, client roles van `ansible-scheduler`;
+  aangemaakt bij de eerste login). Beide bronnen zijn apart aan en uit te zetten.
+  `triggered_by` is `user:local:<naam>` of `user:oidc:<sub>`.
+- **UI-sessies:** een server-side sessie in de DB met een cookie (`HttpOnly`,
+  `SameSite=Lax`, `Secure`), een idle-timeout van 8 uur en maximaal 24 uur. CSRF gaat
+  via een token per sessie (formulierveld of `X-CSRF-Token`) plus een Origin-check.
+  `EventSource` stuurt de cookie mee.
+- **OIDC-login:** authorization code met PKCE, server-side (confidential client).
+  `state`, `nonce` en de verifier staan in een kortlevende cookie. Het id_token en het
+  access token worden gevalideerd via JWKS. Zonder rol wordt de login geweigerd.
+- **API:** accepteert de sessiecookie (met CSRF), een lokale API-token
+  (`Bearer sched_…`, alleen de hash in de DB, met vervaldatum) of een Keycloak-JWT
+  (`iss`, `aud` en `exp` gecontroleerd). Zonder geldige authenticatie volgt 401, zonder
+  de juiste rol 403.
+- **Rollen:** `viewer` (lezen), `operator` (plus launch en cancel), `admin` (plus
+  configuratie, gebruikersbeheer en audit).
+- **Audit:** vastgelegd in dezelfde transactie als de wijziging.
+- **CLI:** `python -m app create-user <naam> --role admin` (wachtwoord via prompt of
+  stdin) en `python -m app create-token <naam> --name <x>`.
+- **Dev:** Keycloak 26.7.4 met een realm-import. Het client-secret en de
+  testwachtwoorden worden door `scripts/dev-keys.sh` in `.dev/` gegenereerd.
+
 **Scope:** een OpenBao-client (AppRole-login, token renew), credential resolutie in de
 worker, Keycloak OIDC-validatie (JWT via JWKS) en RBAC op client roles `viewer`,
 `operator` en `admin`. Een audit log-tabel en `triggered_by` met subject.
@@ -328,8 +387,20 @@ proxy.
 - **SSE schaalt per thread:** elke open stream houdt een thread uit de threadpool bezet
   en pollt de database. Voor dev en kleine schaal is dat prima. Bij meer kijkers:
   `LISTEN/NOTIFY` op nieuwe events of een async generator (fase 5).
-- **CSRF (fase 4):** zodra auth via een sessiecookie loopt, hebben de UI-formulieren en
-  htmx-POSTs CSRF-bescherming nodig (token of `SameSite=strict` plus Origin-check).
+- **Uitloggen bij Keycloak:** de UI verwijdert alleen de eigen sessie. De SSO-sessie in
+  Keycloak blijft bestaan, dus "Inloggen met Keycloak" logt meteen weer in. Oplossing:
+  RP-initiated logout via het `end_session_endpoint` met `id_token_hint`.
+- **Rolwijzigingen in Keycloak** gelden pas bij de volgende login: de sessie bewaart een
+  snapshot, en die blijft maximaal 24 uur geldig. Bearer-tokens volgen direct, want ze
+  leven maar 5 minuten.
+- **Client-IP achter een proxy (fase 5):** audit en lockout gebruiken nu het
+  socket-adres. Achter de reverse proxy moet `X-Forwarded-For` alleen van een vertrouwde
+  hop worden overgenomen.
+- **`/metrics`, `/healthz` en `/readyz` zijn open.** Afschermen via het netwerk of de
+  proxy (fase 5), of een scrape-token.
+- **Lockout per gebruikersnaam:** voorkomt brute force op één account. Een aanvaller kan
+  daarmee wel een account tijdelijk blokkeren. Een rate limit per IP komt er in fase 5
+  bij, via de proxy.
 - **Webhook-URL's naar OpenBao (fase 4):** nu staan ze als JSON-lijst in de env.
 - **Metrics en retentie (fase 5):** `sched_runs_total` wordt uit de runs-tabel geteld.
   Retentie laat de waarde dalen, wat Prometheus als counter-reset ziet. Oplossing: een

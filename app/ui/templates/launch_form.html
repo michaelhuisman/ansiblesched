@@ -6,6 +6,7 @@
   <a class="button secondary" href="/ui/templates">Annuleren</a>
 </div>
 <form class="card form" method="post" action="/ui/templates/{{ item.id }}/launch">
+  {% include "_csrf.html" %}
   <p class="muted">Playbook <span class="mono">{{ item.playbook_path }}</span>.
     Extra vars worden samengevoegd met die van het template{% if item.extra_vars %} (<span class="mono">{{ item.extra_vars | tojson }}</span>){% endif %}.</p>
   <label>Extra vars (JSON)
