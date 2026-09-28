@@ -40,10 +40,12 @@ get() { curl -sf "${auth[@]}" "$API/api/v1$1"; }
 field() { python3 -c "import json,sys; print(json.load(sys.stdin)['$1'])"; }
 
 ssh=$(post /credentials '{"name":"ssh","type":"ssh_key","openbao_path":"ssh/ssh-target","openbao_key":"id_ed25519"}' | field id)
+# Production defaults to strict host key checking: the template needs a known_hosts credential.
+kh=$(post /credentials '{"name":"known-hosts","type":"known_hosts","openbao_path":"ssh/ssh-target-known-hosts","openbao_key":"known_hosts"}' | field id)
 git=$(post /credentials '{"name":"git","type":"git_token","openbao_path":"git/fixtures","openbao_key":"token"}' | field id)
 proj=$(post /projects "{\"name\":\"fixtures\",\"git_url\":\"http://git-http:8080/repo.git\",\"branch\":\"main\",\"credential_id\":$git}" | field id)
 inv=$(post /inventories '{"name":"target","source_type":"inline","content":"ssh-target ansible_user=ansible ansible_python_interpreter=/usr/bin/python3\n"}' | field id)
-tpl=$(post /templates "{\"name\":\"sleep\",\"project_id\":$proj,\"playbook_path\":\"sleep.yml\",\"inventory_id\":$inv,\"machine_credential_id\":$ssh,\"extra_vars\":{\"sleep_s\":60}}" | field id)
+tpl=$(post /templates "{\"name\":\"sleep\",\"project_id\":$proj,\"playbook_path\":\"sleep.yml\",\"inventory_id\":$inv,\"machine_credential_id\":$ssh,\"known_hosts_credential_id\":$kh,\"extra_vars\":{\"sleep_s\":60}}" | field id)
 run=$(post "/templates/$tpl/launch" '{}' | field id)
 status() { get "/runs/$run" | field status; }
 for _ in $(seq 1 60); do [ "$(status)" = running ] && break; sleep 1; done
