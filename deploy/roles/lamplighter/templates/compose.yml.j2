@@ -54,8 +54,10 @@ x-worker: &worker
 {% for key, value in openbao_env.items() %}
     {{ key }}: {{ value | to_json }}
 {% endfor %}
+  # Docker mounts tmpfs noexec by default, but the git askpass script is executed from
+  # the private data dir. nosuid and nodev stay.
   tmpfs:
-    - /run/lamplighter:size={{ lamplighter_runtime_tmpfs_size }},uid=10001,gid=10001,mode=0700
+    - /run/lamplighter:exec,nosuid,nodev,size={{ lamplighter_runtime_tmpfs_size }},uid=10001,gid=10001,mode=0700
   volumes:
     - repocache:/var/cache/lamplighter/repos
 {% if lamplighter_openbao_ca_cert %}
