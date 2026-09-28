@@ -1,7 +1,7 @@
-"""Git over http met basic-auth, alleen lezen (dev en integratietests).
+"""Git over http with basic auth, read-only (dev and integration tests).
 
-Serveert de repo's onder /fixtures via `git http-backend`. Gebruiker `scheduler`,
-wachtwoord = de token uit /secrets/git/token (scripts/dev-keys.sh).
+Serves the repos under /fixtures via `git http-backend`. User `scheduler`,
+password = the token from /secrets/git/token (scripts/dev-keys.sh).
 """
 
 import base64

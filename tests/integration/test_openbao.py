@@ -1,4 +1,4 @@
-"""Fase 4b: credentials uit OpenBao, git via https met token, webhooks uit OpenBao."""
+"""Phase 4b: credentials from OpenBao, git via https with a token, webhooks from OpenBao."""
 
 import json
 import os
@@ -26,7 +26,7 @@ WEBHOOK_PATH = "webhooks/default"
 
 @pytest.fixture(scope="module")
 def bao() -> hvac.Client:
-    """Root-client (alleen dev) om testsecrets te schrijven."""
+    """Root client (dev only) to write test secrets."""
     token = (SECRETS_DIR / "openbao" / "root-token").read_text().strip()
     return hvac.Client(url=OPENBAO, token=token)
 
@@ -85,7 +85,7 @@ def template_for(env: Env, project: dict[str, Any], **extra: Any) -> dict[str, A
 
 
 def db_contains(needle: str) -> list[str]:
-    """Tabellen waarin `needle` ergens in een rij voorkomt."""
+    """Tables in which `needle` occurs somewhere in a row."""
     hits = []
     with get_engine().connect() as conn:
         tables = conn.execute(
@@ -145,7 +145,7 @@ def test_known_secrets_never_stored(env: Env, bao: hvac.Client) -> None:
         assert db_contains(needle) == [], f"secret found in database: {needle[:8]}…"
 
 
-# --- git via https met token ------------------------------------------------------
+# --- git via https with a token -------------------------------------------------------
 
 
 def test_git_https_with_token(env: Env) -> None:
@@ -155,7 +155,7 @@ def test_git_https_with_token(env: Env) -> None:
     assert run["status"] == "successful", run
     assert run["commit_sha"] == fixture_head()
 
-    # De token staat nergens in de bare cache-repo.
+    # The token is nowhere in the bare cache repo.
     token = (SECRETS_DIR / "git" / "token").read_text().strip()
     repo = REPO_CACHE / f"{project['id']}.git"
     assert repo.is_dir()
@@ -184,13 +184,13 @@ def test_git_https_without_credential(env: Env) -> None:
 
 
 def test_project_credential_must_be_git_token(env: Env) -> None:
-    project = git_project(env, env.credential["id"])  # een ssh_key
+    project = git_project(env, env.credential["id"])  # an ssh_key
     run = env.wait(env.launch(template_for(env, project))["id"])
     assert run["status"] == "error"
     assert "not of type git_token" in run["status_reason"]
 
 
-# --- webhooks uit OpenBao -----------------------------------------------------------
+# --- webhooks from OpenBao ----------------------------------------------------------
 
 
 @pytest.fixture

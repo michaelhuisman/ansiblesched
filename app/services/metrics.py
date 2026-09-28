@@ -1,7 +1,7 @@
-"""Prometheus-metrics, bij elke scrape uit Postgres berekend.
+"""Prometheus metrics, computed from Postgres on every scrape.
 
-api, scheduler en workers zijn losse processen (en replicas); in-process counters zouden
-per proces verschillen. De database is de enige bron van waarheid en altijd actueel.
+api, scheduler and workers are separate processes (and replicas); in-process counters
+would differ per process. The database is the single source of truth and always current.
 """
 
 from collections import defaultdict
@@ -29,7 +29,7 @@ _RUNS_BY_STATUS = text(
 
 _bucket_cols = ", ".join(f"count(*) FILTER (WHERE d <= {b}) AS le_{b}" for b in DURATION_BUCKETS)
 _DURATIONS = text(
-    # Alleen constante bucketgrenzen in de f-string, geen invoer.
+    # Only constant bucket bounds in the f-string, no input.
     f"SELECT template, {_bucket_cols}, count(*) AS n, coalesce(sum(d), 0) AS total"  # noqa: S608
     " FROM (SELECT t.name AS template,"
     "  extract(epoch FROM r.finished_at - r.started_at) AS d"
@@ -43,7 +43,7 @@ _QUEUE = text(
     " count(*) FILTER (WHERE status = 'running') AS running FROM runs"
 )
 
-# Tellingen van runs die de retentie al heeft verwijderd.
+# Counts of runs already removed by retention.
 _ARCHIVE = text(
     "SELECT template, status, runs, duration_count, duration_sum, duration_buckets"
     " FROM run_stats_archive"
@@ -76,7 +76,7 @@ class RunMetricsCollector(Collector):
             last_success = session.execute(_LAST_SUCCESS).all()
             archive = session.execute(_ARCHIVE).all()
 
-        # Live runs + archief, zodat retentie de counters niet laat dalen.
+        # Live runs + archive, so retention does not make the counters drop.
         counts: dict[tuple[str, str], int] = defaultdict(int)
         hists: dict[str, _Histogram] = defaultdict(_Histogram)
         for row in by_status:

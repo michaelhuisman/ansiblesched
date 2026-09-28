@@ -1,4 +1,4 @@
-"""Fase 5a (unit): proxy-headers, versie in static-URL's, host keys en lock-verlies."""
+"""Phase 5a (unit): proxy headers, version in static URLs, host keys and lock loss."""
 
 import asyncio
 import stat
@@ -32,7 +32,7 @@ def _client_seen_by_app(peer: str, forwarded_for: str, trusted: str) -> str:
 def test_forwarded_for_only_from_trusted_proxy() -> None:
     assert _client_seen_by_app("127.0.0.1", "203.0.113.9", "127.0.0.1") == "203.0.113.9"
     assert _client_seen_by_app("198.51.100.7", "203.0.113.9", "127.0.0.1") == "198.51.100.7"
-    # Een client die zelf een keten vervalst: alleen de hop vóór de vertrouwde proxy telt.
+    # A client forging a chain itself: only the hop before the trusted proxy counts.
     assert _client_seen_by_app("127.0.0.1", "10.0.0.1, 203.0.113.9", "127.0.0.1") == "203.0.113.9"
 
 
@@ -52,7 +52,7 @@ def test_static_url_versioned_by_content(tmp_path: Path, monkeypatch: pytest.Mon
 def test_cancel_check_aborts_when_lock_lost() -> None:
     lock_ok = {"value": True}
     check = CancelCheck(None, 1, lambda: lock_ok["value"])  # type: ignore[arg-type]
-    check._last_check = float("inf")  # DB-check overslaan in deze test
+    check._last_check = float("inf")  # skip the DB check in this test
     check._last_lock_check = 0.0
     assert check() is False
     lock_ok["value"] = False
@@ -62,7 +62,7 @@ def test_cancel_check_aborts_when_lock_lost() -> None:
     assert LOCK_LOST_REASON == "overlap lock lost"
 
 
-# --- host keys in de executor ------------------------------------------------------
+# --- host keys in the executor ------------------------------------------------------
 
 
 def test_host_key_checking_without_known_hosts_is_refused(

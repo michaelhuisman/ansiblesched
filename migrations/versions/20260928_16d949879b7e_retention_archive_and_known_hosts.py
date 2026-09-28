@@ -45,7 +45,7 @@ def upgrade() -> None:
         ["known_hosts_credential_id"],
         ["id"],
     )
-    # Handmatig: autogenerate ziet geen gewijzigde CHECK-constraints.
+    # Manual: autogenerate does not see changed CHECK constraints.
     op.drop_constraint(op.f("ck_credentials_type"), "credentials", type_="check")
     op.create_check_constraint(
         op.f("ck_credentials_type"),

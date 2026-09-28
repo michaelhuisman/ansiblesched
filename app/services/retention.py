@@ -1,8 +1,8 @@
-"""Retentie: oude events, runs, audit-regels en API-tokens opruimen.
+"""Retention: purge old events, runs, audit entries and API tokens.
 
-Runs worden pas verwijderd nadat hun tellingen (per template en status, plus het
-duur-histogram) bij `run_stats_archive` zijn opgeteld, in dezelfde transactie. Zo
-blijven de metrics kloppen. Lopende en wachtende runs worden nooit aangeraakt.
+Runs are only deleted after their counts (per template and status, plus the duration
+histogram) have been added to `run_stats_archive`, in the same transaction. That keeps
+the metrics correct. Running and queued runs are never touched.
 """
 
 import logging
@@ -36,7 +36,7 @@ def _cutoff(days: int) -> datetime:
 
 
 def purge_events(session: Session, days: int, batch: int = BATCH) -> int:
-    """Events van runs die langer dan `days` dagen geleden klaar zijn."""
+    """Events of runs that finished more than `days` days ago."""
     if days <= 0:
         return 0
     cutoff, total = _cutoff(days), 0
@@ -89,7 +89,7 @@ def _archive(session: Session, stats: dict[tuple[str, str], _Stats]) -> None:
 
 
 def purge_runs(session: Session, days: int, batch: int = BATCH) -> int:
-    """Afgeronde runs ouder dan `days` dagen (events en notificaties gaan via cascade mee)."""
+    """Finished runs older than `days` days (events and notifications go via cascade)."""
     if days <= 0:
         return 0
     cutoff, total = _cutoff(days), 0
@@ -138,7 +138,7 @@ def purge_audit(session: Session, days: int) -> int:
 
 
 def purge_tokens(session: Session, days: int) -> int:
-    """Ingetrokken of verlopen API-tokens, `days` dagen na het intrekken of verlopen."""
+    """Revoked or expired API tokens, `days` days after revocation or expiry."""
     if days <= 0:
         return 0
     cutoff = _cutoff(days)

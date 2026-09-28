@@ -1,4 +1,4 @@
-"""Repo-cache per project (bare clone) en een detached worktree per run."""
+"""Repo cache per project (bare clone) and a detached worktree per run."""
 
 import fcntl
 import logging
@@ -27,7 +27,7 @@ def _subcommand(args: tuple[str, ...]) -> str:
 
 
 def _git(*args: str, cwd: Path | None = None) -> str:
-    # GIT_TERMINAL_PROMPT=0 staat in het image; stdin dicht zodat git nooit wacht.
+    # GIT_TERMINAL_PROMPT=0 is set in the image; stdin closed so git never waits.
     try:
         result = subprocess.run(
             ["git", *args],
@@ -39,7 +39,7 @@ def _git(*args: str, cwd: Path | None = None) -> str:
             check=True,
         )
     except subprocess.CalledProcessError as exc:
-        # Alleen het subcommando, geen argumenten: een URL kan een token bevatten.
+        # Only the subcommand, no arguments: a URL can contain a token.
         raise GitError(f"git {_subcommand(args)} failed: {exc.stderr.strip()[-500:]}") from exc
     except subprocess.TimeoutExpired as exc:
         raise GitError(f"git {_subcommand(args)} timed out after {GIT_TIMEOUT_S}s") from exc
@@ -47,11 +47,11 @@ def _git(*args: str, cwd: Path | None = None) -> str:
 
 
 def askpass_config(auth: GitAuth, auth_dir: Path) -> list[str]:
-    """Schrijf een askpass-script dat gebruikersnaam en token uit bestanden leest.
+    """Write an askpass script that reads username and token from files.
 
-    De token komt zo niet in de URL, de procesargumenten, de omgeving of de config van
-    de bare repo. `auth_dir` staat in de private data dir (tmpfs) en wordt na de run
-    verwijderd. Geeft de `-c`-opties voor git terug.
+    That keeps the token out of the URL, the process arguments, the environment and the
+    config of the bare repo. `auth_dir` is in the private data dir (tmpfs) and is removed
+    after the run. Returns the `-c` options for git.
     """
     auth_dir.mkdir(mode=0o700)
     username, token = auth_dir / "username", auth_dir / "token"
@@ -67,7 +67,7 @@ def askpass_config(auth: GitAuth, auth_dir: Path) -> list[str]:
         f"  *) cat {shlex.quote(str(token))} ;;\n"
         "esac\n"
     )
-    # credential.helper leeg: nooit een helper die de token ergens opslaat.
+    # empty credential.helper: never a helper that stores the token anywhere.
     return ["-c", f"core.askPass={script}", "-c", "credential.helper="]
 
 
@@ -104,10 +104,10 @@ class RepoCache:
         auth: GitAuth | None = None,
         auth_dir: Path | None = None,
     ) -> str:
-        """Fetch de branch en zet HEAD ervan als detached worktree in `dest`.
+        """Fetch the branch and check out its HEAD as a detached worktree in `dest`.
 
-        Met `auth` gaan clone en fetch via een askpass-script in `auth_dir`.
-        Geeft de commit-SHA terug.
+        With `auth`, clone and fetch go through an askpass script in `auth_dir`.
+        Returns the commit SHA.
         """
         _validate_ref(branch)
         remote_opts: list[str] = []
@@ -134,7 +134,7 @@ class RepoCache:
         return sha
 
     def prune(self, project_id: int) -> None:
-        """Ruim worktree-metadata op van verwijderde worktrees."""
+        """Clean up worktree metadata of removed worktrees."""
         if not self._repo(project_id).exists():
             return
         with self._locked(project_id) as repo:

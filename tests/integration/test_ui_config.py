@@ -1,4 +1,4 @@
-"""UI-beheer van projecten, inventories en credentials."""
+"""UI management of projects, inventories and credentials."""
 
 import os
 import re
@@ -107,7 +107,7 @@ def test_project_form_only_offers_git_credentials(ui: httpx.Client, env: Env) ->
 
 def test_inventory_sources(ui: httpx.Client, env: Env) -> None:
     project_id = env.project["id"]
-    # project_file zonder project: validatiefout
+    # project_file without project: validation error
     bad = ui.post(
         "/inventories",
         data={"name": unique("inv"), "source_type": "project_file", "path": "inventory/hosts.ini"},
@@ -149,7 +149,7 @@ def test_inventory_sources(ui: httpx.Client, env: Env) -> None:
 
 
 def test_delete_in_use_and_unused(ui: httpx.Client, env: Env) -> None:
-    env.template("ping.yml")  # zorgt dat de credential zeker in gebruik is
+    env.template("ping.yml")  # makes sure the credential is definitely in use
     in_use = ui.post(f"/credentials/{env.credential['id']}/delete")
     assert in_use.status_code == 409
     assert "in use" in in_use.text
@@ -180,8 +180,8 @@ def test_viewer_is_read_only() -> None:
 
 
 def test_end_to_end_run_from_ui_config(ui: httpx.Client, env: Env) -> None:
-    """Alles via de nieuwe pagina's: git-token-credential, project via https en een
-    inventory uit de repo. De run moet slagen."""
+    """Everything via the new pages: git token credential, project via https and an
+    inventory from the repo. The run must succeed."""
     cred, project, inventory = unique("e2e-git"), unique("e2e-proj"), unique("e2e-inv")
     ui.post(
         "/credentials",

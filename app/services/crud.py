@@ -1,4 +1,4 @@
-"""Generieke CRUD voor de configuratie-objecten (projects, inventories, ...)."""
+"""Generic CRUD for the configuration objects (projects, inventories, ...)."""
 
 from collections.abc import Iterator, Mapping, Sequence
 from contextlib import contextmanager
@@ -25,7 +25,7 @@ def _translate_integrity_errors(session: Session) -> Iterator[None]:
         if isinstance(orig, pg_errors.UniqueViolation):
             raise ConflictError("an object with this name already exists") from exc
         if isinstance(orig, pg_errors.ForeignKeyViolation):
-            # Bij insert/update: verwijzing bestaat niet. Bij delete: object is in gebruik.
+            # On insert/update: the reference does not exist. On delete: the object is in use.
             if "is still referenced" in str(orig):
                 raise ConflictError("object is still in use") from exc
             raise InvalidReferenceError("referenced object does not exist") from exc
@@ -52,7 +52,7 @@ def _label(obj: Entity) -> dict[str, Any]:
     return {"name": name} if name is not None else {}
 
 
-# Waarden komen uit gevalideerde pydantic-schema's (model_dump), vandaar Any.
+# Values come from validated pydantic schemas (model_dump), hence Any.
 def create[M: Entity](
     session: Session,
     model: type[M],
@@ -86,7 +86,7 @@ def update[M: Entity](
 ) -> M:
     obj = get(session, model, obj_id)
     with _translate_integrity_errors(session):
-        # Alleen veldnamen in de audit log, geen waarden.
+        # Only field names in the audit log, no values.
         changed = sorted(k for k, v in values.items() if getattr(obj, k) != v)
         for key, value in values.items():
             setattr(obj, key, value)

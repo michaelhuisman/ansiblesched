@@ -30,7 +30,7 @@ class FakeSession:
 
 
 def _duration_row() -> SimpleNamespace:
-    # Drie runs van 3s, 45s en 400s.
+    # Three runs of 3s, 45s and 400s.
     durations = [3, 45, 400]
     buckets = {f"le_{b}": sum(1 for d in durations if d <= b) for b in DURATION_BUCKETS}
     return SimpleNamespace(template="backup", n=3, total=448.0, **buckets)

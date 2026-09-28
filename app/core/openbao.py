@@ -1,7 +1,7 @@
-"""OpenBao-client: AppRole-login, token-vernieuwing en KV v2 lezen.
+"""OpenBao client: AppRole login, token renewal and KV v2 reads.
 
-Secretwaarden worden alleen teruggegeven, nooit gelogd. Foutmeldingen noemen hooguit
-het pad en de key.
+Secret values are only returned, never logged. Error messages mention at most the
+path and the key.
 """
 
 import logging
@@ -19,13 +19,13 @@ from app.core.config import Settings, get_settings
 
 log = logging.getLogger(__name__)
 
-# Vernieuwen zodra er minder dan dit deel van de TTL over is.
+# Renew once less than this fraction of the TTL remains.
 RENEW_FRACTION = 1 / 3
 TIMEOUT_S = 10
 
 
 class OpenBaoError(Exception):
-    """Secret niet op te halen. De melding bevat geen secretwaarden."""
+    """Secret could not be fetched. The message contains no secret values."""
 
 
 class OpenBaoClient:
@@ -38,7 +38,7 @@ class OpenBaoClient:
         kv_mount: str = "secret",
         verify: bool | str = True,
         clock: Callable[[], float] = time.monotonic,
-        client: Any = None,  # hvac.Client (ongetypeerd); injecteerbaar voor tests
+        client: Any = None,  # hvac.Client (untyped); injectable for tests
     ) -> None:
         self._client = client or hvac.Client(url=addr, verify=verify, timeout=TIMEOUT_S)
         self._role_id = role_id
@@ -69,7 +69,7 @@ class OpenBaoClient:
             verify=verify,
         )
 
-    # --- token-lifecycle -------------------------------------------------------------
+    # --- token lifecycle -------------------------------------------------------------
 
     def _apply_auth(self, auth: dict[str, Any]) -> None:
         self._ttl = float(auth.get("lease_duration") or 0)
@@ -95,7 +95,7 @@ class OpenBaoClient:
             return False
         new_ttl = float(resp["auth"].get("lease_duration") or 0)
         if new_ttl <= remaining:
-            # Max-TTL bereikt: vernieuwen levert niets meer op.
+            # Max TTL reached: renewing gains nothing.
             return False
         self._apply_auth(resp["auth"])
         return True
@@ -111,16 +111,16 @@ class OpenBaoClient:
             return
         self._login()
 
-    # --- lezen -----------------------------------------------------------------------
+    # --- reading ---------------------------------------------------------------------
 
     def read(self, path: str) -> dict[str, str]:
-        """Alle key/values van een KV v2-secret."""
+        """All key/values of a KV v2 secret."""
         with self._lock:
             self._ensure_token()
             try:
                 data = self._read_once(path)
             except hvac_exc.Forbidden:
-                # Token ingetrokken of verlopen buiten onze boekhouding: één keer opnieuw.
+                # Token revoked or expired outside our bookkeeping: retry once.
                 self._login()
                 try:
                     data = self._read_once(path)

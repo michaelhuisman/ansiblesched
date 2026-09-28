@@ -1,4 +1,4 @@
-"""Scheduling: overlap, sync zonder herstart, leader failover en afvuren per minuut."""
+"""Scheduling: overlap, sync without restart, leader failover and firing every minute."""
 
 import time
 from collections.abc import Iterator
@@ -42,7 +42,7 @@ def leader() -> tuple[int, str] | None:
 
 
 def job_next_run(schedule_id: int) -> float | bool | None:
-    """next_run_time van de job; False als de job niet bestaat."""
+    """next_run_time of the job; False if the job does not exist."""
     with get_engine().connect() as conn:
         row = conn.execute(
             select(apscheduler_jobs.c.next_run_time).where(
@@ -53,7 +53,7 @@ def job_next_run(schedule_id: int) -> float | bool | None:
 
 
 def queue_run(template_id: int, policy: str) -> int:
-    """Run direct in de queue zetten, met de extra_vars van het template (zoals launch)."""
+    """Put a run straight into the queue, with the template's extra_vars (like launch)."""
     with Session(get_engine()) as s, s.begin():
         template = s.get_one(Template, template_id)
         return s.scalar(  # type: ignore[no-any-return]
@@ -70,7 +70,7 @@ def queue_run(template_id: int, policy: str) -> int:
 
 @pytest.fixture
 def template_lock(env: Env) -> Iterator[tuple[int, psycopg.Connection[tuple[object, ...]]]]:
-    """Een sleep-template waarvan de test zelf de overlap-lock vasthoudt ('loopt nog')."""
+    """A sleep template whose overlap lock the test itself holds ('still running')."""
     template = env.template("sleep.yml", extra_vars={"sleep_s": 1})
     conn = connect_raw("it:template-lock")
     assert locks.try_lock(conn, locks.NS_TEMPLATE, template["id"])
@@ -95,7 +95,7 @@ def test_queue_waits_until_template_free(
 ) -> None:
     template_id, conn = template_lock
     run_id = queue_run(template_id, "queue")
-    time.sleep(4)  # ruim meer dan het poll-interval van de workers
+    time.sleep(4)  # well over the workers' poll interval
     assert env.get_run(run_id)["status"] == "queued"
 
     locks.unlock(conn, locks.NS_TEMPLATE, template_id)
@@ -139,7 +139,7 @@ def test_enqueue_skips_when_busy(
         when = datetime.now(UTC).replace(microsecond=0)
         run_id = schedules.enqueue(s, schedule, when)
         assert run_id is not None
-        # Dezelfde afvuring nogmaals (tweede leider): geen tweede run.
+        # The same firing again (second leader): no second run.
         assert schedules.enqueue(s, schedule, when) is None
     run = env.get_run(run_id)
     assert run["status"] == "skipped"
@@ -220,8 +220,8 @@ def test_leader_takes_over_after_connection_loss() -> None:
 
 @pytest.mark.slow
 def test_every_minute_exactly_once_and_skip(env: Env) -> None:
-    """Met --scale scheduler=2: elke minuut precies één run. Een schedule met een
-    playbook dat langer loopt dan een minuut geeft 'skipped' voor de tussenliggende."""
+    """With --scale scheduler=2: exactly one run every minute. A schedule with a playbook
+    that runs longer than a minute gives 'skipped' for the ones in between."""
     ping = post(
         env.api,
         "/schedules",
@@ -237,7 +237,7 @@ def test_every_minute_exactly_once_and_skip(env: Env) -> None:
         },
     )
     try:
-        # Wacht op vier afvuringen van de ping-schedule (~4 minuten).
+        # Wait for four firings of the ping schedule (~4 minutes).
         def fired() -> list[dict[str, Any]] | None:
             runs = env.api.get("/runs", params={"limit": 1000}).json()
             mine = [r for r in runs if r["schedule_id"] == ping["id"]]

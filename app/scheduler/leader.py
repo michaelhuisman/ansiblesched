@@ -1,8 +1,8 @@
-"""Scheduler-rol met leader election via een Postgres advisory lock.
+"""Scheduler role with leader election via a Postgres advisory lock.
 
-Eén connectie per replica houdt de leader-lock vast, luistert op `schedules_changed`
-en dient als health-check. Valt die connectie weg, dan stopt APScheduler direct en gaat
-de replica terug naar follower-modus.
+One connection per replica holds the leader lock, listens on `schedules_changed` and
+serves as health check. If that connection drops, APScheduler stops immediately and the
+replica returns to follower mode.
 """
 
 import logging
@@ -54,7 +54,7 @@ def _build_scheduler() -> BackgroundScheduler:
     scheduler = BackgroundScheduler(
         jobstores={
             "default": SQLAlchemyJobStore(engine=get_engine(), tablename=JOBSTORE_TABLE),
-            # Interne jobs van de leider; niet persistent, niet door de reconcile beheerd.
+            # Internal jobs of the leader; not persistent, not managed by the reconcile.
             "internal": MemoryJobStore(),
         },
         job_defaults={"coalesce": True, "max_instances": 1},
@@ -111,17 +111,17 @@ def _sync(scheduler: BackgroundScheduler) -> None:
 def lead(
     conn: psycopg.Connection[tuple[object, ...]], settings: Settings, stop: threading.Event
 ) -> None:
-    """Draai als leider tot `stop` gezet wordt of de lock-connectie wegvalt."""
+    """Run as leader until `stop` is set or the lock connection drops."""
     conn.execute(f"LISTEN {schedules.NOTIFY_CHANNEL}")
     scheduler = _build_scheduler()
-    # Gepauzeerd starten: eerst de jobs gelijktrekken, dan pas afvuren.
+    # Start paused: first sync the jobs, only then fire.
     scheduler.start(paused=True)
     try:
         _sync(scheduler)
         scheduler.resume()
         log.info("scheduler running as leader")
         while not stop.is_set():
-            # Wacht op een NOTIFY of de timeout; een verbroken connectie gooit hier.
+            # Wait for a NOTIFY or the timeout; a broken connection raises here.
             for _ in conn.notifies(timeout=settings.scheduler_sync_interval_s, stop_after=1):
                 pass
             conn.execute("SELECT 1")
@@ -156,7 +156,7 @@ def run_scheduler(settings: Settings) -> int:
                 log.info("acquired leader lock")
                 lead(conn, settings, stop)
         except Exception:
-            # Lock-connectie is dicht (with-blok), dus de lock is vrij voor een ander.
+            # Lock connection is closed (with block), so the lock is free for another replica.
             log.exception("leader loop failed, stepping down")
             stop.wait(settings.scheduler_lock_retry_s)
     return 0

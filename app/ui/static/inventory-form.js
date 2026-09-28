@@ -1,4 +1,4 @@
-// Inventory-formulier: toon alleen de velden van de gekozen bron.
+// Inventory form: only show the fields of the chosen source.
 (function () {
   "use strict";
   const form = document.querySelector("[data-inventory-form]");

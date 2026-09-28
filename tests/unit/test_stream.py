@@ -22,7 +22,7 @@ class FakeClock:
 
 
 class FakeDb:
-    """Script van (status, events) per poll-ronde."""
+    """Script of (status, events) per poll round."""
 
     def __init__(self, rounds: list[tuple[str, list[int]]]) -> None:
         self.rounds = rounds

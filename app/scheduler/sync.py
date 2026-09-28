@@ -1,4 +1,4 @@
-"""Reconcile: de schedules-tabel is de bron van waarheid, APScheduler-jobs zijn afgeleid."""
+"""Reconcile: the schedules table is the source of truth, APScheduler jobs are derived."""
 
 import logging
 from collections.abc import Sequence
@@ -31,8 +31,8 @@ def reconcile(scheduler: BaseScheduler, specs: Sequence[ScheduleSpec]) -> SyncRe
 
     for jid, spec in desired.items():
         job = existing.get(jid)
-        # De job-naam bevat de fingerprint; ongewijzigde jobs blijven staan, zodat hun
-        # next_run_time (en dus misfire-detectie) behouden blijft.
+        # The job name contains the fingerprint; unchanged jobs are kept so their
+        # next_run_time (and thus misfire detection) is preserved.
         if job is not None and job.name == spec.fingerprint:
             continue
         try:
@@ -56,7 +56,7 @@ def reconcile(scheduler: BaseScheduler, specs: Sequence[ScheduleSpec]) -> SyncRe
     for jid in existing.keys() - desired.keys():
         sid = schedule_id_of(jid)
         if sid is None:
-            continue  # niet van ons
+            continue  # not ours
         scheduler.remove_job(jid)
         result.removed.append(sid)
 

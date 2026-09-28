@@ -1,7 +1,7 @@
 #!/bin/sh
 set -eu
-# Vaste host key uit .dev (scripts/dev-keys.sh), zodat de known_hosts-regel in OpenBao
-# voorspelbaar is. Alleen die key aanbieden.
+# Fixed host key from .dev (scripts/dev-keys.sh), so the known_hosts line in OpenBao is
+# predictable. Only offer that key.
 install -m 0600 /host_key /etc/ssh/ssh_host_ed25519_key
 install -m 0644 /host_key.pub /etc/ssh/ssh_host_ed25519_key.pub
 install -d -o ansible -g ansible -m 0700 /home/ansible/.ssh

@@ -1,4 +1,4 @@
-"""Schedules: wijzigingen doorgeven aan de scheduler en runs aanmaken bij afvuren."""
+"""Schedules: pass changes to the scheduler and create runs when they fire."""
 
 from dataclasses import dataclass
 from datetime import datetime
@@ -14,14 +14,14 @@ NOTIFY_CHANNEL = "schedules_changed"
 
 
 def notify_changed(session: Session) -> None:
-    """Seint de leider om te reconcilen. NOTIFY is transactioneel: aflevering bij commit."""
+    """Signal the leader to reconcile. NOTIFY is transactional: delivered on commit."""
     session.execute(text(f"NOTIFY {NOTIFY_CHANNEL}"))
     session.commit()
 
 
 @dataclass(frozen=True)
 class ScheduleSpec:
-    """Wat de scheduler van een schedule nodig heeft om een job te maken."""
+    """What the scheduler needs from a schedule to create a job."""
 
     id: int
     cron: str
@@ -30,7 +30,7 @@ class ScheduleSpec:
 
     @property
     def fingerprint(self) -> str:
-        # Alleen velden die de trigger raken; extra_vars e.d. worden bij afvuren gelezen.
+        # Only fields that affect the trigger; extra_vars etc. are read when firing.
         return f"{self.cron}|{self.timezone}|{self.misfire_grace_s}"
 
 
@@ -64,10 +64,10 @@ def _insert_run(session: Session, values: dict[str, object]) -> int | None:
 
 
 def template_busy(session: Session, template_id: int) -> bool:
-    """Loopt er een run van dit template, of staat er al een te wachten?
+    """Is a run of this template running, or is one already waiting?
 
-    'Loopt' komt uit pg_locks (de overlap-lock van de worker), niet uit runs.status:
-    een run die bij een gecrashte worker op 'running' bleef staan, blokkeert dan niet.
+    'Running' comes from pg_locks (the worker's overlap lock), not from runs.status:
+    a run left in 'running' by a crashed worker then does not block.
     """
     locked = session.scalar(
         text(
@@ -82,10 +82,10 @@ def template_busy(session: Session, template_id: int) -> bool:
 
 
 def enqueue(session: Session, schedule: Schedule, scheduled_for: datetime) -> int | None:
-    """Maak de run voor één afvuring. Geeft None als die al bestond (dubbele leider).
+    """Create the run for one firing. Returns None if it already existed (duplicate leader).
 
-    Bij policy 'skip' en een bezet template wordt de run direct als skipped vastgelegd;
-    de worker controleert bij het claimen nogmaals (race tussen aanmaken en claimen).
+    With policy 'skip' and a busy template the run is recorded as skipped right away;
+    the worker checks again when claiming (race between creating and claiming).
     """
     with session.begin():
         template = session.get_one(Template, schedule.template_id)
@@ -124,7 +124,7 @@ def enqueue(session: Session, schedule: Schedule, scheduled_for: datetime) -> in
 
 
 def record_missed(session: Session, schedule: Schedule, scheduled_for: datetime) -> int | None:
-    """Een afvuring die buiten de misfire-grace viel, zichtbaar als skipped run."""
+    """A firing that fell outside the misfire grace, visible as a skipped run."""
     return _insert_run(
         session,
         {

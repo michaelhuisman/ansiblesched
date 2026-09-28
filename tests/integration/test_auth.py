@@ -1,4 +1,4 @@
-"""Fase 4a: authenticatie, RBAC, CSRF, lockout, API-tokens, audit en OIDC."""
+"""Phase 4a: authentication, RBAC, CSRF, lockout, API tokens, audit and OIDC."""
 
 import os
 import re
@@ -74,7 +74,7 @@ CALLS: dict[str, tuple[str, Call]] = {
         "launch",
         lambda c, ctx: c.post(f"/templates/{ctx['template']['id']}/launch", json={}),
     ),
-    # Een afgeronde run annuleren geeft 409 als je het mag, 403 als je het niet mag.
+    # Canceling a finished run returns 409 if you are allowed, 403 if you are not.
     "cancel": ("cancel", lambda c, ctx: c.post(f"/runs/{ctx['run']['id']}/cancel")),
     "create project": (
         "configure",
@@ -150,7 +150,7 @@ def test_invalid_tokens_get_401(token: str) -> None:
 
 def test_tampered_keycloak_token_gets_401() -> None:
     header, payload, sig = kc_token("kc-viewer").split(".")
-    # Andere payload met de oorspronkelijke handtekening.
+    # Different payload with the original signature.
     forged = ".".join([header, payload[:-4] + ("AAAA" if payload[-4:] != "AAAA" else "BBBB"), sig])
     assert httpx.get(f"{API_URL}/api/v1/runs", headers=bearer(forged)).status_code == 401
 
@@ -212,7 +212,7 @@ def test_api_token_lifecycle(env: Env) -> None:
     assert raw.startswith("lamplighter_")
     listed = c.get("/tokens").json()
     assert any(t["id"] == created.json()["id"] for t in listed)
-    assert all("token" not in t for t in listed)  # alleen bij aanmaken
+    assert all("token" not in t for t in listed)  # only on creation
 
     new = httpx.Client(base_url=f"{API_URL}/api/v1", headers=bearer(raw), timeout=10)
     assert new.get("/runs", params={"limit": 1}).status_code == 200
@@ -249,7 +249,7 @@ def test_disabling_user_revokes_access(env: Env) -> None:
     user_id = next(u["id"] for u in me if u["username"] == user.username)
     assert env.api.patch(f"/users/{user_id}", json={"disabled": True}).status_code == 200
     assert httpx.get(f"{API_URL}/api/v1/runs", headers=user.headers).status_code == 401
-    assert ui.get("/runs").status_code == 303  # sessie weg, terug naar login
+    assert ui.get("/runs").status_code == 303  # session gone, back to login
 
 
 # --- gebruikersbeheer via API ---------------------------------------------------------
@@ -293,7 +293,7 @@ def test_ui_login_and_logout(local_users: dict[str, LocalUser]) -> None:
     page = ui.get("/runs")
     assert page.status_code == 200
     assert "it-viewer" in page.text
-    assert "New template" not in ui.get("/templates").text  # viewer: geen beheerknoppen
+    assert "New template" not in ui.get("/templates").text  # viewer: no management buttons
     assert ui.get("/templates/new").status_code == 403
 
     assert ui.post("/logout").status_code == 303
@@ -314,9 +314,7 @@ def test_ui_login_wrong_password_and_lockout() -> None:
     assert locked.status_code == 401, "account should be locked"
     unknown = c.post("/login", data={"username": unique("nobody"), "password": "whatever-123"})
     assert unknown.status_code == 401
-    assert (
-        unknown.text.count("Invalid username or password") == 1
-    )  # zelfde melding: geen enumeratie
+    assert unknown.text.count("Invalid username or password") == 1  # same message: no enumeration
 
     with get_sessionmaker()() as s:
         reasons = [
@@ -351,7 +349,7 @@ def test_csrf_is_enforced(admin: LocalUser, env: Env) -> None:
     assert ok.status_code == 303
     env.wait(int(ok.headers["location"].rsplit("/", 1)[1]))
 
-    # Een API-call met sessiecookie valt ook onder CSRF.
+    # An API call with a session cookie is also subject to CSRF.
     api_via_cookie = httpx.post(
         f"{API_URL}/api/v1/projects",
         cookies=ui.cookies,
@@ -396,7 +394,7 @@ def test_ui_users_list_layout(admin: LocalUser) -> None:
     assert 'href="/ui/users/new"' in page
     headers = re.findall(r"<th>([^<]*)</th>", page)
     assert headers[-1].startswith("Last login")
-    assert "<form" not in page.split("<table", 1)[1].split("</table>", 1)[0]  # geen inline forms
+    assert "<form" not in page.split("<table", 1)[1].split("</table>", 1)[0]  # no inline forms
 
 
 def test_ui_add_local_user(admin: LocalUser) -> None:
@@ -445,7 +443,7 @@ def test_ui_edit_user_and_reset_password(admin: LocalUser, env: Env) -> None:
     assert "do not match" in bad.text
     reset = ui.post(f"/users/{user_id}/password", data={"new": "n" * 12, "confirm": "n" * 12})
     assert reset.status_code == 303
-    assert target_ui.get("/runs").status_code == 303  # sessie van de gebruiker vervallen
+    assert target_ui.get("/runs").status_code == 303  # the user's sessions have expired
     assert login_ui(target.username, "n" * 12).get("/runs").status_code == 200
 
 
@@ -476,7 +474,7 @@ def test_ui_change_own_password(env: Env) -> None:
 
 
 def _internal(url: str) -> str:
-    """Browser-URL's (localhost) omzetten naar de adressen binnen het compose-netwerk."""
+    """Map browser URLs (localhost) to the addresses inside the compose network."""
     parts = urlsplit(url)
     host = {"localhost:8080": urlsplit(KEYCLOAK).netloc, "localhost:8000": urlsplit(API_URL).netloc}
     return urlunsplit(parts._replace(netloc=host.get(parts.netloc, parts.netloc)))

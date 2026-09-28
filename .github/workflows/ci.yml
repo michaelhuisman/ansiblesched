@@ -1,5 +1,5 @@
-# CI: lint, unit, integratie (tegen compose.dev.yml met Docker) en het runtime-image naar
-# GHCR. Actions zijn op commit-SHA vastgezet; de tag staat erachter als commentaar.
+# CI: lint, unit, integration (against compose.dev.yml with Docker) and the runtime image to
+# GHCR. Actions are pinned to a commit SHA; the tag follows as a comment.
 name: ci
 
 on:
@@ -57,33 +57,33 @@ jobs:
       COMPOSE: docker compose -f compose.dev.yml
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - name: Dev-secrets genereren (alleen voor deze runner)
+      - name: Generate dev secrets (for this runner only)
         run: ./scripts/dev-keys.sh
-      - name: Stack starten
+      - name: Start the stack
         run: $COMPOSE up -d --build --scale worker=2 --scale scheduler=2
-      - name: Wachten op keycloak en api
+      - name: Wait for keycloak and api
         run: |
           for i in $(seq 1 90); do
             kc=$(docker inspect lamplighter-keycloak-1 --format '{{.State.Health.Status}}' 2>/dev/null || true)
             if [ "$kc" = healthy ] && curl -sf http://127.0.0.1:8000/readyz >/dev/null; then
-              echo "stack klaar na $((i * 3))s"; exit 0
+              echo "stack ready after $((i * 3))s"; exit 0
             fi
             sleep 3
           done
           $COMPOSE ps -a
           exit 1
-      - name: Integratietests
+      - name: Integration tests
         run: $COMPOSE run --rm dev pytest tests/integration -m "not slow" -q -rfs
-      - name: Trage tests (echte cron-afvuringen)
+      - name: Slow tests (real cron firings)
         run: $COMPOSE run --rm dev pytest tests/integration -m slow -q -rfs
-      - name: Failover (kill van de scheduler-leider)
+      - name: Failover (kill the scheduler leader)
         run: ./scripts/it-failover.sh
-      - name: Secret-scan van de containerlogs
+      - name: Secret scan of the container logs
         run: ./scripts/it-secret-scan.sh
-      - name: Containerlogs bij een fout
+      - name: Container logs on failure
         if: failure()
         run: $COMPOSE logs --no-color > compose-logs.txt 2>&1 || true
-      - name: Logs bewaren
+      - name: Keep logs
         if: failure()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
@@ -92,7 +92,7 @@ jobs:
           retention-days: 7
 
   image:
-    # Alleen na groene tests, en alleen voor main en versietags (niet voor PR's).
+    # Only after green tests, and only for main and version tags (not for PRs).
     needs: [lint, unit, integration]
     if: github.event_name == 'push'
     runs-on: ubuntu-24.04

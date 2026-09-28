@@ -1,4 +1,4 @@
-"""Gebruikers: lokale accounts (wachtwoord, rollen, lockout) en OIDC-accounts."""
+"""Users: local accounts (password, roles, lockout) and OIDC accounts."""
 
 import contextlib
 import re
@@ -19,13 +19,13 @@ MIN_PASSWORD_LEN = 12
 USERNAME_RE = re.compile(r"^[a-z0-9][a-z0-9._-]{1,63}$")
 
 _hasher = PasswordHasher()
-# Voor onbekende gebruikersnamen: toch een verify doen, zodat de responstijd niet
-# verraadt of een naam bestaat.
+# For unknown usernames: still run a verify, so the response time does not
+# reveal whether a name exists.
 _DUMMY_HASH = _hasher.hash("dummy-password-for-timing")
 
 
 class AuthenticationError(Exception):
-    """Bewust generiek: geen onderscheid tussen onbekende naam, fout wachtwoord of lockout."""
+    """Deliberately generic: no distinction between unknown name, wrong password or lockout."""
 
 
 def _check_roles(roles: Iterable[str]) -> list[str]:
@@ -146,7 +146,7 @@ def authenticate(
     lockout_s: int,
     ip: str | None = None,
 ) -> User:
-    """Controleer een lokale login. Houdt mislukte pogingen en lockout bij en logt alles."""
+    """Check a local login. Tracks failed attempts and lockout, and logs everything."""
     now = datetime.now(UTC)
     name = username.strip().lower()
     user = get_local(session, name)
@@ -191,7 +191,7 @@ def upsert_oidc(
     display_name: str | None,
     email: str | None,
 ) -> User:
-    """Maak of werk een OIDC-gebruiker bij (key: `sub`). Commit niet."""
+    """Create or update an OIDC user (key: `sub`). Does not commit."""
     stmt = (
         insert(User)
         .values(

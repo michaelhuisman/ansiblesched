@@ -1,4 +1,4 @@
-"""UI-sessies. Het sessie-id gaat als cookie naar de browser; hier staat alleen de hash."""
+"""UI sessions. The session id goes to the browser as a cookie; only the hash is stored."""
 
 import hashlib
 import secrets
@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 
 from app.models import AuthSession, User
 
-# last_seen_at niet bij elk request bijwerken.
+# don't update last_seen_at on every request.
 TOUCH_INTERVAL = timedelta(seconds=60)
 
 
@@ -70,7 +70,7 @@ def destroy(session: Session, raw: str) -> AuthSession | None:
 
 
 def destroy_for_user(session: Session, user_id: int) -> None:
-    """Na uitschakelen of wachtwoordreset: alle sessies van de gebruiker ongeldig."""
+    """After disabling or a password reset: invalidate all sessions of the user."""
     session.execute(delete(AuthSession).where(AuthSession.user_id == user_id))
     session.commit()
 

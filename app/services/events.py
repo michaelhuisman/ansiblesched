@@ -1,10 +1,10 @@
-"""Filteren van ansible-runner events vóór opslag.
+"""Filtering of ansible-runner events before storage.
 
-Drie lagen:
-1. no_log: resultaten met `_ansible_no_log` of een `censored`-markering worden vervangen
-   en de stdout van het event vervalt.
-2. Bekende secret-velden (password, token, private_key, ...) worden gemaskeerd.
-3. Bekende secret-waarden (de credentials van deze run) worden overal gemaskeerd.
+Three layers:
+1. no_log: results with `_ansible_no_log` or a `censored` marker are replaced and the
+   event's stdout is dropped.
+2. Known secret fields (password, token, private_key, ...) are masked.
+3. Known secret values (the credentials of this run) are masked everywhere.
 """
 
 import re
@@ -20,10 +20,10 @@ _SECRET_KEY = re.compile(
     r"password|passwd|passphrase|secret|token|private_key|api_key|(^|_)pass$",
     re.IGNORECASE,
 )
-# Kortere waarden maskeren geeft te veel valse treffers.
+# Masking shorter values gives too many false positives.
 _MIN_SECRET_LEN = 6
 
-# JSON uit ansible-runner: willekeurig geneste structuur.
+# JSON from ansible-runner: arbitrarily nested structure.
 Json = Any
 
 
@@ -57,7 +57,7 @@ class SecretMasker:
             stripped = secret.strip()
             if len(stripped) >= _MIN_SECRET_LEN:
                 needles.add(stripped)
-            # Meerregelige secrets (SSH-keys) ook per regel, voor als ze deels in output komen.
+            # Multi-line secrets (SSH keys) also per line, in case parts end up in output.
             needles.update(
                 line.strip() for line in secret.splitlines() if len(line.strip()) >= _MIN_SECRET_LEN
             )
@@ -98,7 +98,7 @@ def _clean(value: Json, masker: SecretMasker, state: dict[str, bool]) -> Json:
 
 
 def _strip_nul(text: str) -> str:
-    # Postgres text/jsonb kan geen NUL-bytes bevatten.
+    # Postgres text/jsonb cannot contain NUL bytes.
     return text.replace("\x00", "")
 
 
@@ -113,9 +113,9 @@ def _parse_created(raw: Json) -> datetime:
 
 
 def filter_event(raw: Mapping[str, Json], masker: SecretMasker) -> FilteredEvent | None:
-    """Zet een ruw ansible-runner event om naar een veilig op te slaan event.
+    """Convert a raw ansible-runner event into an event that is safe to store.
 
-    Geeft None voor events zonder volgnummer (die kunnen we niet ordenen).
+    Returns None for events without a sequence number (we cannot order those).
     """
     counter = raw.get("counter")
     if not isinstance(counter, int):

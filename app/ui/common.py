@@ -1,4 +1,4 @@
-"""Gedeelde onderdelen van de UI: Jinja-omgeving, rendering en formulierhulpjes."""
+"""Shared parts of the UI: Jinja environment, rendering and form helpers."""
 
 import hashlib
 import json
@@ -49,8 +49,8 @@ def _static_version(path: str) -> str:
 
 
 def static(path: str) -> str:
-    """URL van een statisch bestand met een inhoudsversie, zodat browsers na een update
-    niet uit hun cache blijven laden."""
+    """URL of a static file with a content version, so browsers don't keep loading from
+    their cache after an update."""
     return f"/ui/static/{path}?v={_static_version(path)}"
 
 
@@ -64,7 +64,7 @@ CanConfigure = Annotated[Principal, Depends(require(Action.CONFIGURE))]
 CanRead = Annotated[Principal, Depends(require(Action.READ))]
 CanManageUsers = Annotated[Principal, Depends(require(Action.MANAGE_USERS))]
 
-# Formulieren sturen alles als string; lege velden worden None.
+# Forms send everything as strings; empty fields become None.
 FormData = dict[str, Any]
 
 

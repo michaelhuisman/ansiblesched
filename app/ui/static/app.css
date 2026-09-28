@@ -124,7 +124,7 @@ fieldset.roles-field legend { font-weight: 600; padding: 0 4px; }
 fieldset.roles-field label.check { flex: 0 0 auto; }
 fieldset.roles-field small { flex-basis: 100%; }
 
-/* --- projecten, inventories, credentials --- */
+/* --- projects, inventories, credentials --- */
 p.intro { margin: -4px 0 16px; }
 .form label.grow { flex: 2; }
 .prefixed { display: flex; align-items: stretch; }
@@ -140,7 +140,7 @@ fieldset.choice legend { font-weight: 600; padding: 0 4px; }
 fieldset.choice label.check { flex: 0 0 auto; }
 [hidden] { display: none !important; }
 
-/* Topbalk: niets laten afbreken; de navigatie scrollt horizontaal als het echt krap wordt. */
+/* Top bar: never wrap; the navigation scrolls horizontally when space is really tight. */
 .topbar { gap: 16px; }
 .brand, .topbar .user, .topbar button { white-space: nowrap; }
 .topbar nav { overflow-x: auto; scrollbar-width: none; }

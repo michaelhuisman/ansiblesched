@@ -1,5 +1,5 @@
-"""Audit log. `record` voegt een regel toe aan de lopende transactie van de aanroeper,
-zodat de wijziging en de audit-regel samen committen of samen falen."""
+"""Audit log. `record` adds an entry to the caller's current transaction, so the change
+and the audit entry commit or fail together."""
 
 from collections.abc import Sequence
 from dataclasses import dataclass
@@ -14,7 +14,7 @@ from app.models import AuditEntry
 
 @dataclass(frozen=True)
 class Actor:
-    """Wie iets doet: `user:local:<naam>` of `user:oidc:<sub>`, plus het IP-adres."""
+    """Who does something: `user:local:<name>` or `user:oidc:<sub>`, plus the IP address."""
 
     name: str
     ip: str | None = None
@@ -26,7 +26,7 @@ def record(
     action: str,
     object_type: str | None = None,
     object_id: object = None,
-    details: dict[str, Any] | None = None,  # nooit secrets
+    details: dict[str, Any] | None = None,  # never secrets
 ) -> None:
     if actor is None:
         return

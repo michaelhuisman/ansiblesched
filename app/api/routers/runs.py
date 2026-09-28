@@ -89,8 +89,8 @@ def stream_run(
     last_event_id: Annotated[str | None, Header()] = None,
     after_seq: Annotated[int, Query(ge=0)] = 0,
 ) -> StreamingResponse:
-    """Live events van een run (SSE). Herverbinden gaat verder vanaf Last-Event-ID."""
-    runs.get(session, run_id)  # 404 vóórdat de stream begint
+    """Live events of a run (SSE). Reconnecting resumes from Last-Event-ID."""
+    runs.get(session, run_id)  # 404 before the stream starts
     start = max(after_seq, stream.parse_last_event_id(last_event_id))
     return StreamingResponse(
         stream.run_stream(get_sessionmaker(), run_id, after_seq=start),

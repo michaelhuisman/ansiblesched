@@ -1,116 +1,117 @@
 # CLAUDE.md — lamplighter
 
-Applicatie die Ansible-playbooks op schema en on-demand uitvoert. Eén codebase en één
-image met drie rollen: `api`, `scheduler` en `worker` (plus een one-shot `migrate`).
-Namen: compose-project en image `lamplighter`, env prefix `LAMPLIGHTER_`, paden
-`/run/lamplighter` en `/var/cache/lamplighter`. Het volledige ontwerp en de fasering staan in `docs/plan.md`. Lees dat bestand vóór je
-aan een fase begint.
+Application that runs Ansible playbooks on a schedule and on demand. One codebase and one
+image with three roles: `api`, `scheduler` and `worker` (plus a one-shot `migrate`).
+Names: compose project and image `lamplighter`, env prefix `LAMPLIGHTER_`, paths
+`/run/lamplighter` and `/var/cache/lamplighter`. The full design and the phasing are in
+`docs/plan.md`. Read that file before starting on a phase.
 
-## Stack (vastgepind, niet afwijken zonder overleg)
+## Stack (pinned, do not deviate without discussion)
 
 - Python 3.12
 - FastAPI + uvicorn (API)
-- Jinja2 + htmx voor de UI (server-rendered; htmx vendored, geen Node-toolchain)
+- Jinja2 + htmx for the UI (server-rendered; htmx vendored, no Node toolchain)
 - prometheus-client (metrics), httpx (webhooks)
-- SQLAlchemy 2.x, **synchrone** sessies, `psycopg` 3 als driver
-- Alembic voor alle schemawijzigingen
-- APScheduler 3.x met `SQLAlchemyJobStore` op Postgres
-- ansible-core (vastgepinde versie in `requirements.txt`) + ansible-runner
-- pydantic v2 + pydantic-settings voor config
-- PyJWT (OIDC/JWKS), argon2-cffi (wachtwoorden lokale gebruikers)
-- hvac voor OpenBao (vanaf fase 4)
-- pytest, ruff (lint + format), mypy (strict op `app/`)
+- SQLAlchemy 2.x, **synchronous** sessions, `psycopg` 3 as driver
+- Alembic for all schema changes
+- APScheduler 3.x with `SQLAlchemyJobStore` on Postgres
+- ansible-core (pinned version in `requirements.txt`) + ansible-runner
+- pydantic v2 + pydantic-settings for config
+- PyJWT (OIDC/JWKS), argon2-cffi (passwords of local users)
+- hvac for OpenBao (from phase 4)
+- pytest, ruff (lint + format), mypy (strict on `app/`)
 - Postgres 18
-- Docker Compose voor dev en productie
+- Docker Compose for dev and production
 
-## Structuur
+## Structure
 
 ```
 app/
   __main__.py      # python -m app {api|scheduler|worker|migrate}
   api/             # FastAPI routers, schemas (pydantic)
-  ui/              # server-rendered UI: Jinja2-templates, htmx (vendored) en statics
+  ui/              # server-rendered UI: Jinja2 templates, htmx (vendored) and statics
   scheduler/       # APScheduler setup, leader election, schedule -> run enqueue
   worker/          # queue consumer, ansible-runner wrapper, git checkout
   models/          # SQLAlchemy models
-  services/        # businesslogica, los van API en worker
-  core/            # config, db session, logging, (later) auth en openbao client
+  services/        # business logic, separate from API and worker
+  core/            # config, db session, logging, auth, oidc and openbao client
 migrations/        # Alembic
 tests/
   unit/
-  integration/     # draait tegen compose.dev.yml
+  integration/     # runs against compose.dev.yml
 docs/plan.md
-compose.yml        # productie
+compose.yml        # production
 compose.dev.yml    # dev: postgres, ssh-target, keycloak, openbao, git-http, webhook-sink
 ```
 
-## Commando's
+## Commands
 
-Containers draaien met Podman (`podman compose`), niet met Docker Desktop. Tooling
-draait in de `dev`-container (Python 3.12, broncode gemount); lokaal is geen 3.12 nodig.
+Containers run with Podman (`podman compose`), not with Docker Desktop. Tooling runs in
+the `dev` container (Python 3.12, source code mounted); no local 3.12 is needed.
 
 ```bash
-# dev-omgeving (eenmalig: scripts/dev-keys.sh)
+# dev environment (once: scripts/dev-keys.sh)
 podman compose -f compose.dev.yml up -d --build --scale worker=2 --scale scheduler=2
-# na een codewijziging: herstart volstaat (app/ en migrations/ zijn gemount)
+# after a code change a restart is enough (app/ and migrations/ are mounted)
 podman compose -f compose.dev.yml restart api worker scheduler
-# eerste lokale admin (wachtwoord via prompt)
+# first local admin (password via prompt)
 podman compose -f compose.dev.yml run --rm dev python -m app create-user admin --role admin
 
-# kwaliteit, in de dev-container
+# quality, in the dev container
 DEV="podman compose -f compose.dev.yml run --rm dev"
 $DEV sh -c 'ruff check . && ruff format --check .'
 $DEV mypy app
 $DEV pytest tests/unit
-$DEV pytest tests/integration     # vereist draaiende compose.dev.yml
-$DEV pytest tests/integration -m "not slow"   # zonder de tests die minuten op cron wachten
-scripts/it-failover.sh            # op de host: kill de scheduler-leider, check takeover
-scripts/it-secret-scan.sh         # op de host: geen dev-secrets in de containerlogs
-# scripts kiezen de runtime via $CONTAINER (podman als die er is, anders docker)
+$DEV pytest tests/integration     # requires a running compose.dev.yml
+$DEV pytest tests/integration -m "not slow"   # without the tests that wait minutes for cron
+scripts/it-failover.sh            # on the host: kill the scheduler leader, check takeover
+scripts/it-secret-scan.sh         # on the host: no dev secrets in the container logs
+# the scripts pick the runtime via $CONTAINER (podman if available, otherwise docker)
 
-# migraties
-$DEV alembic revision --autogenerate -m "<omschrijving>"
+# migrations
+$DEV alembic revision --autogenerate -m "<description>"
 podman compose -f compose.dev.yml run --rm migrate
 ```
 
 ## CI
 
-GitHub Actions (`.github/workflows/ci.yml`): lint, unit, integratie (compose.dev.yml
-met Docker, inclusief de trage tests, failover en secret-scan) en het image naar GHCR
-(`ghcr.io/<owner>/lamplighter`, alleen `main` en `v*`-tags). Actions pin je op commit-SHA.
+GitHub Actions (`.github/workflows/ci.yml`): lint, unit, integration (compose.dev.yml
+with Docker, including the slow tests, failover and secret scan) and the image to GHCR
+(`ghcr.io/<owner>/lamplighter`, only `main` and `v*` tags). Pin actions to a commit SHA.
 
-## Conventies
+## Conventions
 
-- Volledige type hints. Geen `Any` zonder reden.
-- Config uitsluitend via `app/core/config.py` (pydantic-settings, env prefix `LAMPLIGHTER_`).
-  Nergens `os.environ` direct lezen.
-- Businesslogica in `app/services/`. Routers en de worker-loop zijn dun.
-- Elke schemawijziging krijgt een Alembic-migratie. Nooit `metadata.create_all()`
-  buiten tests.
-- Tijd altijd timezone-aware in UTC opslaan. Een schedule heeft een eigen tijdzoneveld.
-- Logging via stdlib `logging` in JSON-formaat naar stdout. Geen `print`.
-- UI-teksten zijn Engels; code-commentaar en docs zijn Nederlands.
-- De worker voert ansible-runner uit zonder process isolation
-  (`process_isolation=False`). Ansible draait direct in de worker-container.
-- De private data dir van ansible-runner staat onder `LAMPLIGHTER_RUNTIME_DIR` (tmpfs) en
-  wordt na elke run verwijderd, ook bij een exception.
-- Queue-claims gaan via `SELECT ... FOR UPDATE SKIP LOCKED`. Overlap per template en
-  leader election gaan via Postgres advisory locks. Geen extra infra (Redis e.d.).
+- Full type hints. No `Any` without a reason.
+- Config only via `app/core/config.py` (pydantic-settings, env prefix `LAMPLIGHTER_`).
+  Never read `os.environ` directly.
+- Business logic in `app/services/`. Routers and the worker loop are thin.
+- Every schema change gets an Alembic migration. Never `metadata.create_all()` outside
+  tests.
+- Always store time timezone-aware in UTC. A schedule has its own time zone field.
+- Logging via stdlib `logging` in JSON format to stdout. No `print`.
+- All text in the repo is English: UI, code comments, docstrings, CLI and script output,
+  docs. Commit messages and pull requests are English too.
+- The worker runs ansible-runner without process isolation (`process_isolation=False`).
+  Ansible runs directly in the worker container.
+- The ansible-runner private data dir lives under `LAMPLIGHTER_RUNTIME_DIR` (tmpfs) and is
+  removed after every run, also on an exception.
+- Queue claims use `SELECT ... FOR UPDATE SKIP LOCKED`. Overlap per template and leader
+  election use Postgres advisory locks. No extra infrastructure (Redis etc.).
 
-## Veiligheidsregels tijdens het bouwen
+## Safety rules while building
 
-- Nooit echte hosts, echte inventories of echte OpenBao aanspreken. Integratietests
-  draaien uitsluitend tegen de `ssh-target` container uit `compose.dev.yml`.
-- Geen secrets committen. Dev-keys worden gegenereerd door `scripts/dev-keys.sh`
-  en staan in `.gitignore`.
-- Secrets nooit in de database, logs of run_events. Credentials zijn referenties.
-  ansible-runner events worden vóór opslag gefilterd op `no_log` en bekende
-  secret-velden.
+- Never talk to real hosts, real inventories or a real OpenBao. Integration tests run
+  exclusively against the `ssh-target` container from `compose.dev.yml`.
+- Never commit secrets. Dev keys are generated by `scripts/dev-keys.sh` and are listed in
+  `.gitignore`.
+- Secrets never go into the database, logs or run_events. Credentials are references.
+  ansible-runner events are filtered for `no_log` and known secret fields before
+  storage.
 
-## Werkwijze
+## Way of working
 
-- Werk per fase uit `docs/plan.md`. Maak eerst een plan en wacht op akkoord.
-- Een fase is klaar als alle acceptatiecriteria van die fase gehaald zijn en
-  ruff, mypy en pytest (unit + integration) groen zijn.
-- Houd wijzigingen binnen de scope van de fase. Signaleer zaken voor latere fases
-  in `docs/plan.md` onder "Open punten" in plaats van ze direct te bouwen.
+- Work per phase from `docs/plan.md`. Make a plan first and wait for approval.
+- A phase is done when all acceptance criteria of that phase are met and ruff, mypy and
+  pytest (unit + integration) are green.
+- Keep changes within the scope of the phase. Flag things for later phases in
+  `docs/plan.md` under "Open items" instead of building them right away.

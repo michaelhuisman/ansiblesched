@@ -7,13 +7,13 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from app.core.config import get_settings
 
-# Zichtbaar in pg_stat_activity. De worker zet hier `worker:<id>`; de reaper gebruikt dat
-# om te zien of een worker nog leeft. Postgres kapt af op 63 tekens.
+# Visible in pg_stat_activity. The worker sets `worker:<id>` here; the reaper uses that
+# to see whether a worker is still alive. Postgres truncates at 63 characters.
 _application_name = "lamplighter"
 
 
 def set_application_name(name: str) -> None:
-    """Aanroepen vóór het eerste gebruik van de engine (bij het starten van een rol)."""
+    """Call before the engine is first used (when a role starts)."""
     global _application_name
     if get_engine.cache_info().currsize:
         raise RuntimeError("set_application_name must be called before get_engine()")
@@ -35,15 +35,15 @@ def get_sessionmaker() -> sessionmaker[Session]:
 
 
 def session_scope() -> Iterator[Session]:
-    """FastAPI-dependency: één sessie per request."""
+    """FastAPI dependency: one session per request."""
     with get_sessionmaker()() as session:
         yield session
 
 
 def connect_raw(application_name: str) -> psycopg.Connection[tuple[object, ...]]:
-    """Eigen psycopg-connectie (autocommit) voor sessie-locks en LISTEN.
+    """Dedicated psycopg connection (autocommit) for session locks and LISTEN.
 
-    Buiten de pool: de levensduur van de connectie is de levensduur van de lock.
+    Outside the pool: the lifetime of the connection is the lifetime of the lock.
     """
     url = make_url(get_settings().database_url).set(drivername="postgresql")
     return psycopg.connect(

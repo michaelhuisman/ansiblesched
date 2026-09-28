@@ -1,4 +1,4 @@
-# Meerdere stappen met pauzes: output komt geleidelijk binnen (live log in de UI).
+# Several steps with pauses: output arrives gradually (live log in the UI).
 - name: Step by step
   hosts: all
   gather_facts: false

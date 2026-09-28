@@ -1,9 +1,9 @@
-"""Reaper: runs op 'running' waarvan de worker niet meer bestaat.
+"""Reaper: runs in 'running' whose worker no longer exists.
 
-Een worker is in leven zolang er een databaseverbinding met
-`application_name = worker:<worker_id>` is (pool of lock-connectie). Crasht of verdwijnt
-de worker, dan sluit Postgres die verbindingen (TCP-keepalives in compose) en zet de
-reaper de run na `grace_s` op 'error'.
+A worker is alive as long as there is a database connection with
+`application_name = worker:<worker_id>` (pool or lock connection). If the worker crashes
+or disappears, Postgres closes those connections (TCP keepalives in compose) and the
+reaper sets the run to 'error' after `grace_s`.
 """
 
 import logging
@@ -17,7 +17,7 @@ log = logging.getLogger(__name__)
 
 REASON = "worker lost"
 
-# application_name wordt door Postgres afgekapt op 63 tekens: vergelijk ook afgekapt.
+# Postgres truncates application_name at 63 characters: compare truncated as well.
 _REAP = text(
     "UPDATE runs SET status = 'error', status_reason = :reason, finished_at = now()"
     " WHERE status = 'running'"
@@ -35,7 +35,7 @@ _NOTIFY = text(
 
 
 def reap(session: Session, grace_s: int) -> list[int]:
-    """Zet weesruns op 'error' en zet (net als bij andere fouten) een notificatie klaar."""
+    """Set orphaned runs to 'error' and (as with other errors) queue a notification."""
     with session.begin():
         ids = list(session.scalars(_REAP, {"reason": REASON, "grace": grace_s}))
         if ids:

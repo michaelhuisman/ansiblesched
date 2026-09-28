@@ -11,7 +11,7 @@ from app.services.schedules import ScheduleSpec
 @pytest.fixture
 def scheduler() -> Iterator[BackgroundScheduler]:
     sched = BackgroundScheduler(timezone="UTC")
-    sched.start(paused=True)  # geen jobs laten afvuren
+    sched.start(paused=True)  # don't let jobs fire
     yield sched
     sched.shutdown(wait=False)
 

@@ -1,8 +1,8 @@
-"""OIDC (Keycloak): discovery, JWKS, token-validatie en de authorization-code-flow met PKCE.
+"""OIDC (Keycloak): discovery, JWKS, token validation and the authorization code flow with PKCE.
 
-Twee adressen voor dezelfde IdP: de browser gebruikt het publieke adres (issuer en
-authorization endpoint), de server gebruikt het interne adres uit discovery voor token
-en JWKS. Keycloak geeft dat met `hostname-backchannel-dynamic`.
+Two addresses for the same IdP: the browser uses the public address (issuer and
+authorization endpoint), the server uses the internal address from discovery for token
+and JWKS. Keycloak provides that with `hostname-backchannel-dynamic`.
 """
 
 import base64
@@ -24,12 +24,12 @@ HTTP_TIMEOUT_S = 10.0
 ALGORITHMS = ["RS256", "RS384", "RS512", "ES256", "ES384", "PS256"]
 LEEWAY_S = 30
 
-# Claims uit een gevalideerde token: JSON van de IdP.
+# Claims from a validated token: JSON from the IdP.
 Claims = dict[str, Any]
 
 
 class OidcError(Exception):
-    """Token of flow ongeldig. De melding is veilig voor logs, niet voor gebruikers."""
+    """Invalid token or flow. The message is safe for logs, not for users."""
 
 
 @dataclass(frozen=True)
@@ -61,7 +61,7 @@ class OidcClient:
     def from_settings(cls, settings: Settings) -> "OidcClient | None":
         if not settings.oidc_enabled or settings.oidc_issuer is None:
             return None
-        if settings.oidc_client_secret is None:  # afgedekt door oidc_enabled
+        if settings.oidc_client_secret is None:  # covered by oidc_enabled
             return None
         issuer = settings.oidc_issuer.rstrip("/")
         return cls(
@@ -73,7 +73,7 @@ class OidcClient:
             audience=settings.oidc_audience or settings.oidc_client_id,
         )
 
-    # --- metadata en keys ---------------------------------------------------------
+    # --- metadata and keys ----------------------------------------------------------
 
     def metadata(self) -> dict[str, Any]:
         with self._lock:
@@ -96,7 +96,7 @@ class OidcClient:
         except (jwt.PyJWKClientError, jwt.DecodeError) as exc:
             raise OidcError(f"no usable signing key: {type(exc).__name__}") from exc
 
-    # --- validatie ------------------------------------------------------------------
+    # --- validation -----------------------------------------------------------------
 
     def _decode(self, token: str, audience: str) -> Claims:
         try:
@@ -123,7 +123,7 @@ class OidcClient:
         return claims
 
     def roles(self, claims: Claims) -> list[str]:
-        """Client roles van onze client uit `resource_access`."""
+        """Client roles of our client from `resource_access`."""
         access = claims.get("resource_access")
         if not isinstance(access, dict):
             return []

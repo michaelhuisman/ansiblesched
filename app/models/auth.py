@@ -9,8 +9,8 @@ ROLES = ("viewer", "operator", "admin")
 
 
 class User(Entity):
-    """Lokale en OIDC-gebruikers. OIDC-gebruikers worden bij de eerste login aangemaakt;
-    hun rollen komen uit de token en worden hier niet bewaard."""
+    """Local and OIDC users. OIDC users are created on their first login;
+    their roles come from the token and are not stored here."""
 
     __tablename__ = "users"
     __table_args__ = (
@@ -35,7 +35,7 @@ class User(Entity):
 
 
 class AuthSession(Entity):
-    """UI-sessie. Alleen de sha256 van het sessie-id staat hier."""
+    """UI session. Only the sha256 of the session id is stored here."""
 
     __tablename__ = "sessions"
     __table_args__ = (Index("ix_sessions_expires_at", "expires_at"),)
@@ -43,8 +43,8 @@ class AuthSession(Entity):
     token_hash: Mapped[str] = mapped_column(Text, unique=True)
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
     csrf_token: Mapped[str] = mapped_column(Text)
-    # Rollen uit de OIDC-token op het moment van inloggen; leeg voor lokale users
-    # (die worden per request uit `users` gelezen).
+    # Roles from the OIDC token at login time; empty for local users
+    # (those are read from `users` on every request).
     oidc_roles: Mapped[list[str]] = mapped_column(ARRAY(Text), server_default="{}")
     created_at: Mapped[datetime] = mapped_column(server_default=func.now())
     last_seen_at: Mapped[datetime] = mapped_column(server_default=func.now())
@@ -52,14 +52,14 @@ class AuthSession(Entity):
 
 
 class ApiToken(Entity):
-    """Persoonlijke API-token van een lokale user. Alleen de sha256 staat hier."""
+    """Personal API token of a local user. Only the sha256 is stored here."""
 
     __tablename__ = "api_tokens"
 
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
     name: Mapped[str] = mapped_column(Text)
     token_hash: Mapped[str] = mapped_column(Text, unique=True)
-    # Eerste tekens van de token, om hem in de UI te herkennen.
+    # First characters of the token, to recognise it in the UI.
     prefix: Mapped[str] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(server_default=func.now())
     expires_at: Mapped[datetime | None]

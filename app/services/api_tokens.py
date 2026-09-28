@@ -1,6 +1,6 @@
-"""Persoonlijke API-tokens voor lokale gebruikers.
+"""Personal API tokens for local users.
 
-De token wordt één keer getoond bij aanmaken; daarna bestaat alleen de sha256.
+The token is shown once on creation; after that only the sha256 exists.
 """
 
 import secrets

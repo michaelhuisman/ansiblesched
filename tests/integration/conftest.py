@@ -1,4 +1,4 @@
-"""Integratietests tegen compose.dev.yml. Draaien in de `dev`-container:
+"""Integration tests against compose.dev.yml. Run in the `dev` container:
 
 podman compose -f compose.dev.yml run --rm dev pytest tests/integration
 """
@@ -42,7 +42,7 @@ class LocalUser:
 
 
 def ensure_local_user(username: str, roles: list[str]) -> LocalUser:
-    """Maak (of reset) een lokale testgebruiker met een vers wachtwoord en API-token."""
+    """Create (or reset) a local test user with a fresh password and API token."""
     password = secrets.token_urlsafe(18)
     with get_sessionmaker()() as s:
         user = users.get_local(s, username)
@@ -65,13 +65,13 @@ def api(admin: LocalUser) -> Iterator[httpx.Client]:
     try:
         httpx.get(f"{API_URL}/readyz", timeout=5).raise_for_status()
     except httpx.HTTPError as exc:
-        pytest.skip(f"API niet bereikbaar op {API_URL}: {exc}")
+        pytest.skip(f"API not reachable at {API_URL}: {exc}")
     with httpx.Client(base_url=f"{API_URL}/api/v1", timeout=10, headers=admin.headers) as client:
         yield client
 
 
 def login_ui(username: str, password: str) -> httpx.Client:
-    """UI-client met sessiecookie; stuurt het CSRF-token mee als header."""
+    """UI client with session cookie; sends the CSRF token as a header."""
     client = httpx.Client(base_url=f"{API_URL}/ui", timeout=10, follow_redirects=False)
     resp = client.post(
         "/login", data={"username": username, "password": password, "next": "/ui/runs"}
