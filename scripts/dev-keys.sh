@@ -9,6 +9,8 @@
 #   .dev/secrets/openbao/*               root-token (alleen init + tests), AppRole-id's
 #   .dev/secrets/git/token               token voor de git-http-server
 #   .dev/secrets/webhook/hmac            HMAC-secret voor webhooks
+#   .dev/secrets/metrics.env             LAMPLIGHTER_METRICS_TOKEN voor /metrics
+#   .dev/secrets/ssh-target/host_*       vaste host key van ssh-target + known_hosts
 set -eu
 cd "$(dirname "$0")/.."
 dir=.dev/secrets
@@ -24,6 +26,12 @@ secret() {  # secret <bestand>: aanmaken als hij nog niet bestaat, dan uitlezen
 if [ ! -f "$dir/ssh-target/id_ed25519" ]; then
     ssh-keygen -q -t ed25519 -N "" -C "lamplighter-dev" -f "$dir/ssh-target/id_ed25519"
 fi
+# Vaste host key voor ssh-target en de bijbehorende known_hosts-regel.
+if [ ! -f "$dir/ssh-target/host_ed25519_key" ]; then
+    ssh-keygen -q -t ed25519 -N "" -C "ssh-target" -f "$dir/ssh-target/host_ed25519_key"
+fi
+printf 'ssh-target %s\n' "$(cut -d' ' -f1,2 "$dir/ssh-target/host_ed25519_key.pub")" \
+    >"$dir/ssh-target/known_hosts"
 secret "$dir/vault/password" >/dev/null
 
 client_secret=$(secret "$dir/keycloak/client-secret")
@@ -41,6 +49,7 @@ printf 'LAMPLIGHTER_OIDC_CLIENT_SECRET=%s\n' "$client_secret" >"$dir/oidc.env"
 printf 'KC_BOOTSTRAP_ADMIN_USERNAME=admin\nKC_BOOTSTRAP_ADMIN_PASSWORD=%s\n' "$kc_admin" >"$dir/keycloak.env"
 
 secret "$dir/git/token" >/dev/null
+printf 'LAMPLIGHTER_METRICS_TOKEN=%s\n' "$(secret "$dir/metrics-token")" >"$dir/metrics.env"
 secret "$dir/webhook/hmac" >/dev/null
 root_token=$(secret "$dir/openbao/root-token")
 worker_role=$(secret "$dir/openbao/worker-role-id")

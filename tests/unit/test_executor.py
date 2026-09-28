@@ -111,7 +111,11 @@ def env(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> SimpleNamespace:
     monkeypatch.setattr(executor_mod.queue, "finish", lambda _s, _id, **kw: rec.finished.update(kw))
     monkeypatch.setattr(executor_mod.queue, "add_events", lambda _s, rows: rec.events.extend(rows))
 
-    settings = Settings(database_url="postgresql+psycopg://x/y", runtime_dir=runtime)
+    settings = Settings(
+        database_url="postgresql+psycopg://x/y",
+        runtime_dir=runtime,
+        ansible_host_key_checking=False,
+    )
     repos = FakeRepos()
 
     def make(runner_fn: Any) -> Executor:
@@ -163,6 +167,8 @@ def test_successful_run(env: SimpleNamespace) -> None:
     assert seen["extravars"] == {"a": 1}
     assert seen["timeout"] == 30
     assert seen["cmdline"] is None
+    # Eigen SSH ControlPath per run: geen gedeelde masterverbindingen tussen runs.
+    assert seen["envvars"]["ANSIBLE_SSH_CONTROL_PATH_DIR"] == str(env.runtime / "5" / "cp")
     assert not (env.runtime / "5").exists()
     assert env.repos.pruned == [1]
 
@@ -260,4 +266,17 @@ def test_git_failure_is_setup_error_without_token(env: SimpleNamespace) -> None:
     reason = env.rec.finished["reason"]
     assert reason.startswith("git fetch failed")
     assert "GIT-TOKEN-789" not in reason
+    assert not (env.runtime / "5").exists()
+
+
+def test_lost_lock_makes_run_error(env: SimpleNamespace) -> None:
+    def fake_runner(**kwargs: Any) -> SimpleNamespace:
+        check = kwargs["cancel_callback"]
+        check._last_lock_check = 0.0
+        assert check() is True  # lock_guard zegt: kwijt
+        return _runner_result("canceled", 254)
+
+    status = env.make(fake_runner).execute(5, lock_guard=lambda: False)
+    assert status == RunStatus.ERROR
+    assert env.rec.finished["reason"] == "overlap lock lost"
     assert not (env.runtime / "5").exists()

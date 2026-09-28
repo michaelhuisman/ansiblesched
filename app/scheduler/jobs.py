@@ -7,11 +7,12 @@ from datetime import UTC, datetime, timedelta
 
 import httpx
 
+from app.core import locks
 from app.core.config import get_settings
-from app.core.db import get_sessionmaker
+from app.core.db import connect_raw, get_sessionmaker
 from app.core.openbao import OpenBaoError, get_openbao
 from app.scheduler.trigger import build_trigger, latest_fire_time
-from app.services import notifications, schedules, sessions
+from app.services import notifications, reaper, retention, schedules, sessions
 
 log = logging.getLogger(__name__)
 
@@ -143,3 +144,30 @@ def purge_sessions() -> None:
         removed = sessions.purge_expired(session)
     if removed:
         log.info("expired sessions purged", extra={"count": removed})
+
+
+RETENTION_JOB_ID = "internal:retention"
+REAPER_JOB_ID = "internal:reaper"
+
+
+def run_retention() -> None:
+    """Dagelijks. Met een eigen advisory lock: nooit twee tegelijk, ook niet als het
+    leiderschap tijdens de run wisselt."""
+    settings = get_settings()
+    with connect_raw("scheduler:retention") as conn:
+        if not locks.try_lock(conn, locks.NS_SCHEDULER, locks.MAINTENANCE_ID):
+            log.info("retention already running elsewhere")
+            return
+        with get_sessionmaker()() as session:
+            retention.run_all(
+                session,
+                events_days=settings.retention_events_days,
+                runs_days=settings.retention_runs_days,
+                audit_days=settings.retention_audit_days,
+                tokens_days=settings.retention_tokens_days,
+            )
+
+
+def reap_lost_runs() -> None:
+    with get_sessionmaker()() as session:
+        reaper.reap(session, get_settings().reaper_grace_s)

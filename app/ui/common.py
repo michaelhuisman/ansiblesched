@@ -1,7 +1,9 @@
 """Gedeelde onderdelen van de UI: Jinja-omgeving, rendering en formulierhulpjes."""
 
+import hashlib
 import json
 from datetime import UTC, datetime, timedelta
+from functools import lru_cache
 from pathlib import Path
 from typing import Annotated, Any
 
@@ -38,7 +40,22 @@ def _fmt_duration(start: datetime | None, end: datetime | None) -> str:
     return f"{hours}h{minutes:02d}m" if hours else f"{minutes}m{seconds:02d}s"
 
 
+@lru_cache(maxsize=64)
+def _static_version(path: str) -> str:
+    file = (STATIC_DIR / path).resolve()
+    if not file.is_relative_to(STATIC_DIR.resolve()) or not file.is_file():
+        return "0"
+    return hashlib.sha256(file.read_bytes()).hexdigest()[:10]
+
+
+def static(path: str) -> str:
+    """URL van een statisch bestand met een inhoudsversie, zodat browsers na een update
+    niet uit hun cache blijven laden."""
+    return f"/ui/static/{path}?v={_static_version(path)}"
+
+
 templates.env.filters["dt"] = _fmt_dt
+templates.env.globals["static"] = static
 templates.env.globals["duration"] = _fmt_duration
 
 CanLaunch = Annotated[Principal, Depends(require(Action.LAUNCH))]

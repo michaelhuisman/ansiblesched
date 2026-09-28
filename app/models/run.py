@@ -1,7 +1,16 @@
 from datetime import datetime
 from enum import StrEnum
 
-from sqlalchemy import CheckConstraint, ForeignKey, Index, Text, UniqueConstraint, func, text
+from sqlalchemy import (
+    CheckConstraint,
+    Double,
+    ForeignKey,
+    Index,
+    Text,
+    UniqueConstraint,
+    func,
+    text,
+)
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.models.base import Entity, JsonDict
@@ -73,3 +82,21 @@ class RunEvent(Entity):
     created_at: Mapped[datetime]
     stdout: Mapped[str | None] = mapped_column(Text)
     data: Mapped[JsonDict] = mapped_column(server_default="{}")
+
+
+class RunStatsArchive(Entity):
+    """Tellingen van runs die door de retentie zijn verwijderd, zodat de metrics
+    (counters en het duur-histogram) na het opruimen blijven kloppen."""
+
+    __tablename__ = "run_stats_archive"
+    __table_args__ = (
+        UniqueConstraint("template", "status", name="uq_run_stats_archive_template_status"),
+    )
+
+    template: Mapped[str] = mapped_column(Text)
+    status: Mapped[str] = mapped_column(Text)
+    runs: Mapped[int] = mapped_column(server_default="0")
+    duration_count: Mapped[int] = mapped_column(server_default="0")
+    duration_sum: Mapped[float] = mapped_column(Double, server_default="0")
+    # Cumulatieve bucket-tellingen: {"1": n, "5": n, ...} (bovengrens in seconden).
+    duration_buckets: Mapped[JsonDict] = mapped_column(server_default="{}")

@@ -18,6 +18,22 @@ class Settings(BaseSettings):
 
     api_host: str = "0.0.0.0"  # noqa: S104 - luistert binnen de container
     api_port: int = 8000
+    # Alleen van deze proxies (komma-gescheiden IP's/CIDR's) worden X-Forwarded-For en
+    # X-Forwarded-Proto overgenomen.
+    trusted_proxies: str = "127.0.0.1"
+    # Gezet: /metrics vereist `Authorization: Bearer <token>`. Leeg: /metrics is open.
+    metrics_token: SecretStr | None = None
+
+    # --- retentie (dagen; 0 = nooit opruimen) ---
+    retention_events_days: int = Field(default=30, ge=0)
+    retention_runs_days: int = Field(default=180, ge=0)
+    retention_audit_days: int = Field(default=365, ge=0)
+    retention_tokens_days: int = Field(default=30, ge=0)
+    retention_hour_utc: int = Field(default=3, ge=0, le=23)
+
+    # --- reaper: runs op 'running' zonder levende worker ---
+    reaper_grace_s: int = Field(default=120, ge=10)
+    reaper_interval_s: int = Field(default=60, ge=5)
 
     ansible_host_key_checking: bool = True
 

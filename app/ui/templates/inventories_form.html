@@ -32,5 +32,5 @@
     {% with field='content' %}{% include "_field_error.html" %}{% endwith %}</label>
   <div class="form-actions"><button type="submit">Save</button></div>
 </form>
-<script src="/ui/static/inventory-form.js" defer></script>
+<script src="{{ static('inventory-form.js') }}" defer></script>
 {% endblock %}

@@ -9,6 +9,7 @@ import psycopg
 NS_SCHEDULER = 0x5343  # "SC"
 NS_TEMPLATE = 0x5450  # "TP"
 SCHEDULER_LEADER_ID = 1
+MAINTENANCE_ID = 2  # retentie: nooit twee tegelijk, ook niet rond een failover
 
 _INT4_MAX = 2**31 - 1
 

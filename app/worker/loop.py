@@ -2,6 +2,7 @@ import logging
 import shutil
 import signal
 import threading
+from functools import partial
 from types import FrameType
 
 import psycopg
@@ -74,7 +75,10 @@ def run_worker(settings: Settings) -> int:
                 continue
             log.info("claimed run", extra={"run_id": claimed.run_id})
             try:
-                executor.execute(claimed.run_id)
+                executor.execute(
+                    claimed.run_id,
+                    lock_guard=partial(locker.ensure, claimed.template_id),
+                )
             finally:
                 locker.unlock(claimed.template_id)
         except (OperationalError, psycopg.Error):

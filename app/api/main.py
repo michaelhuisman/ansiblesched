@@ -1,3 +1,4 @@
+import hmac
 import logging
 from urllib.parse import quote
 
@@ -10,6 +11,7 @@ from sqlalchemy.exc import SQLAlchemyError
 
 from app.api.routers import auth, config, runs
 from app.core.auth import NotAuthenticatedError, PermissionDeniedError
+from app.core.config import get_settings
 from app.core.db import get_engine, get_sessionmaker
 from app.services.errors import ConflictError, InvalidReferenceError, NotFoundError, ServiceError
 from app.services.metrics import build_registry
@@ -85,7 +87,15 @@ def create_app() -> FastAPI:
         return RedirectResponse("/ui/runs")
 
     @app.get("/metrics", include_in_schema=False)
-    def metrics() -> Response:
+    def metrics(request: Request) -> Response:
+        token = get_settings().metrics_token
+        if token is not None:
+            supplied = request.headers.get("Authorization", "").removeprefix("Bearer ").strip()
+            if not hmac.compare_digest(supplied.encode(), token.get_secret_value().encode()):
+                return Response(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    headers={"WWW-Authenticate": "Bearer"},
+                )
         return Response(generate_latest(registry), media_type=CONTENT_TYPE_LATEST)
 
     @app.get("/healthz", include_in_schema=False)

@@ -32,6 +32,11 @@ EVENT_BATCH_SIZE = 50
 _SSH_AGENT_NOISE = "Identity added: "
 EVENT_FLUSH_INTERVAL_S = 1.0
 CANCEL_CHECK_INTERVAL_S = 1.0
+LOCK_CHECK_INTERVAL_S = 5.0
+LOCK_LOST_REASON = "overlap lock lost"
+
+# Controleert of de overlap-lock van de run nog van deze worker is.
+LockGuard = Callable[[], bool]
 
 # ansible_runner.run(**kwargs) -> Runner; ongetypeerde library.
 RunnerFn = Callable[..., Any]
@@ -67,6 +72,7 @@ class RunSpec:
     machine_credential: CredentialRef
     vault_credential: CredentialRef | None
     git_credential: CredentialRef | None = None
+    known_hosts_credential: CredentialRef | None = None
 
 
 def _ref(cred: Credential) -> CredentialRef:
@@ -98,6 +104,13 @@ def load_spec(session: Session, run_id: int) -> RunSpec:
         )
         if git is not None and git.type != "git_token":
             raise RunSetupError(f"project credential {git.id} is not of type git_token")
+        known_hosts = (
+            session.get_one(Credential, template.known_hosts_credential_id)
+            if template.known_hosts_credential_id is not None
+            else None
+        )
+        if known_hosts is not None and known_hosts.type != "known_hosts":
+            raise RunSetupError(f"credential {known_hosts.id} is not of type known_hosts")
         return RunSpec(
             run_id=run.id,
             project_id=project.id,
@@ -116,6 +129,7 @@ def load_spec(session: Session, run_id: int) -> RunSpec:
             machine_credential=_ref(machine),
             vault_credential=_ref(vault) if vault else None,
             git_credential=_ref(git) if git else None,
+            known_hosts_credential=_ref(known_hosts) if known_hosts else None,
         )
 
 
@@ -170,16 +184,30 @@ class EventSink:
 
 
 class CancelCheck:
-    def __init__(self, sm: sessionmaker[Session], run_id: int) -> None:
+    """ansible-runner's cancel_callback: annuleren op verzoek, of als de overlap-lock
+    definitief kwijt is (dan kan een andere run van hetzelfde template al lopen)."""
+
+    def __init__(
+        self, sm: sessionmaker[Session], run_id: int, lock_guard: LockGuard | None = None
+    ) -> None:
         self._sm = sm
         self._run_id = run_id
+        self._lock_guard = lock_guard
         self._last_check = 0.0
+        self._last_lock_check = time.monotonic()
         self._canceled = False
+        self.lost_lock = False
 
     def __call__(self) -> bool:
         if self._canceled:
             return True
         now = time.monotonic()
+        if self._lock_guard is not None and now - self._last_lock_check >= LOCK_CHECK_INTERVAL_S:
+            self._last_lock_check = now
+            if not self._lock_guard():
+                log.error("overlap lock lost, aborting run", extra={"run_id": self._run_id})
+                self.lost_lock = self._canceled = True
+                return True
         if now - self._last_check < CANCEL_CHECK_INTERVAL_S:
             return False
         self._last_check = now
@@ -224,8 +252,9 @@ class Executor:
     def run_dir(self, run_id: int) -> Path:
         return self._settings.runtime_dir / str(run_id)
 
-    def execute(self, run_id: int) -> RunStatus:
+    def execute(self, run_id: int, lock_guard: LockGuard | None = None) -> RunStatus:
         run_dir = self.run_dir(run_id)
+        check = CancelCheck(self._sm, run_id, lock_guard)
         spec: RunSpec | None = None
         status = RunStatus.ERROR
         rc: int | None = None
@@ -235,8 +264,10 @@ class Executor:
             with self._sm() as session:
                 spec = load_spec(session, run_id)
             run_dir.mkdir(mode=0o700, parents=False)
-            status, rc, stats = self._run(spec, run_dir)
-            if status == RunStatus.CANCELED:
+            status, rc, stats = self._run(spec, run_dir, check)
+            if check.lost_lock:
+                status, reason = RunStatus.ERROR, LOCK_LOST_REASON
+            elif status == RunStatus.CANCELED:
                 reason = "canceled by user"
             elif status == RunStatus.TIMEOUT:
                 reason = f"exceeded timeout of {spec.timeout_s}s"
@@ -266,7 +297,7 @@ class Executor:
         return status
 
     def _run(
-        self, spec: RunSpec, run_dir: Path
+        self, spec: RunSpec, run_dir: Path, check: CancelCheck
     ) -> tuple[RunStatus, int | None, dict[str, Any] | None]:
         project_dir = run_dir / "project"
         secrets: list[str] = []
@@ -311,6 +342,16 @@ class Executor:
             vault_file.write_text(vault_password)
             cmdline = f"--vault-password-file {shlex.quote(str(vault_file))}"
 
+        envvars = {
+            "ANSIBLE_HOST_KEY_CHECKING": str(self._settings.ansible_host_key_checking),
+            "ANSIBLE_RETRY_FILES_ENABLED": "False",
+            # Eigen ControlPath per run: SSH-masterverbindingen (ControlPersist) worden nooit
+            # gedeeld tussen runs. Anders zou een run een verbinding hergebruiken die een
+            # andere run zonder (of met een andere) host key-controle heeft opgezet.
+            "ANSIBLE_SSH_CONTROL_PATH_DIR": str(run_dir / "cp"),
+        }
+        envvars.update(self._host_key_env(spec, run_dir))
+
         sink = EventSink(self._sm, spec.run_id, SecretMasker(secrets))
         runner = self._runner_fn(
             private_data_dir=str(run_dir),
@@ -324,14 +365,11 @@ class Executor:
             verbosity=spec.verbosity or None,
             ssh_key=ssh_key,
             cmdline=cmdline,
-            envvars={
-                "ANSIBLE_HOST_KEY_CHECKING": str(self._settings.ansible_host_key_checking),
-                "ANSIBLE_RETRY_FILES_ENABLED": "False",
-            },
+            envvars=envvars,
             timeout=spec.timeout_s,
             settings={"pexpect_timeout": 1},
             event_handler=sink.handle,
-            cancel_callback=CancelCheck(self._sm, spec.run_id),
+            cancel_callback=check,
             process_isolation=False,
             suppress_env_files=True,
             quiet=True,
@@ -340,3 +378,28 @@ class Executor:
         status = _RUNNER_STATUS.get(str(runner.status), RunStatus.ERROR)
         rc = runner.rc if isinstance(runner.rc, int) else None
         return status, rc, sink.stats
+
+    def _host_key_env(self, spec: RunSpec, run_dir: Path) -> dict[str, str]:
+        """Host key checking: een known_hosts-credential op het template dwingt strikte
+        checking af, los van de globale instelling. Zonder known_hosts geldt de globale
+        instelling; staat die aan, dan weigeren we de run meteen met een duidelijke reden."""
+        if spec.known_hosts_credential is None:
+            if self._settings.ansible_host_key_checking:
+                raise RunSetupError(
+                    "host key checking is enabled but the template has no known_hosts credential"
+                )
+            return {}
+        known_hosts = resolve(self._resolver, spec.known_hosts_credential)
+        path = run_dir / "known_hosts"
+        path.touch(mode=0o600)
+        path.write_text(known_hosts if known_hosts.endswith("\n") else known_hosts + "\n")
+        return {
+            "ANSIBLE_HOST_KEY_CHECKING": "True",
+            "ANSIBLE_SSH_COMMON_ARGS": " ".join(
+                [
+                    f"-o UserKnownHostsFile={shlex.quote(str(path))}",
+                    "-o GlobalKnownHostsFile=/dev/null",
+                    "-o StrictHostKeyChecking=yes",
+                ]
+            ),
+        }
