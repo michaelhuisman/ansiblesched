@@ -417,7 +417,33 @@ Harbor), een Ansible-rol `deploy/roles/lamplighter`, een retentie-job voor
 `run_events` en oude runs, een backup van Postgres (`pg_dump`) en TLS via een reverse
 proxy.
 
-_Geleverd in twee delen: **5a** hardening van de app, **5b** productie en deploy._
+_Geleverd in delen: **5a** hardening van de app; **5b** productie en deploy, met eerst
+de CI (5b-1) en daarna de Ansible-rol, de productie-compose en de backup (5b-2)._
+
+**Keuzes 5b**
+- **Doelplatform:** containers via Docker Compose op een VM. Welk OS maakt niet uit, en
+  Docker Engine met de compose-plugin is de standaard. Een Helm chart volgt in fase 6.
+- **TLS:** de bestaande nginx op het systeem termineert TLS; de app zelf doet geen TLS.
+  Er komt een voorbeeldconfig in `docs/deploy/nginx.conf`, met buffering uit voor SSE,
+  de `X-Forwarded-*`-headers, een rate limit op de login en `/metrics` beperkt tot
+  monitoring. `LAMPLIGHTER_TRUSTED_PROXIES` wijst naar het adres waarvandaan nginx
+  binnenkomt; bij Docker-port-forwarding is dat meestal de bridge-gateway, niet
+  `127.0.0.1`.
+- **Postgres:** in de compose op dezelfde host.
+- **Registry:** GHCR (`ghcr.io/<owner>/lamplighter`).
+
+**Uitwerking 5b-1 (CI)**, GitHub Actions in `.github/workflows/ci.yml`, met de actions op
+commit-SHA vastgezet:
+- `lint`: ruff en mypy.
+- `unit`: pytest `tests/unit`.
+- `integration`: `compose.dev.yml` met Docker op de runner, met `dev-keys.sh`, de
+  integratietests, de trage tests, `it-failover.sh` en `it-secret-scan.sh`. Bij een fout
+  worden de containerlogs als artefact bewaard.
+- `image`: alleen bij een push naar `main` of een `v*`-tag, en alleen na groene tests.
+  Bouwt target `runtime` en pusht naar GHCR met als tags de volledige git-SHA, `latest`
+  (op `main`) en de semver (bij een tag).
+- De host-scripts kiezen de runtime via `$CONTAINER` (standaard Podman als die er is,
+  anders Docker; zie `scripts/lib.sh`).
 
 **Uitwerking 5a**
 - **Retentie:** een dagelijkse interne job van de scheduler-leider
@@ -466,6 +492,15 @@ _Geleverd in twee delen: **5a** hardening van de app, **5b** productie en deploy
 
 ---
 
+## Fase 6 — Kubernetes (Helm)
+
+**Scope:** een Helm chart als alternatief voor Docker Compose: deployments voor api,
+scheduler en worker (met `terminationGracePeriodSeconds` voor lopende runs), de
+migrate-job als hook, een PodDisruptionBudget, secrets via de OpenBao-integratie van het
+cluster, en Postgres extern of via een operator.
+
+---
+
 ## Open punten
 
 - **SSE schaalt per thread:** elke open stream houdt een thread uit de threadpool bezet
@@ -484,8 +519,6 @@ _Geleverd in twee delen: **5a** hardening van de app, **5b** productie en deploy
   bij, via de proxy.
 - **UI op smalle schermen:** de tabellen zijn voor desktop gemaakt en scrollen op een
   telefoon niet netjes.
-- **Failover-test met kill:** `scripts/it-failover.sh` draait op de host. Opnemen in CI
-  (fase 5).
 - **Remote processen bij cancel/timeout:** ansible-runner stopt het lokale
   ansible-proces; een lopend commando op de target (bv. `sleep`) loopt daar door.
 - **Secret-id's van AppRoles** staan nu als env-bestand op de host. Beter: response

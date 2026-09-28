@@ -66,11 +66,18 @@ $DEV pytest tests/integration     # vereist draaiende compose.dev.yml
 $DEV pytest tests/integration -m "not slow"   # zonder de tests die minuten op cron wachten
 scripts/it-failover.sh            # op de host: kill de scheduler-leider, check takeover
 scripts/it-secret-scan.sh         # op de host: geen dev-secrets in de containerlogs
+# scripts kiezen de runtime via $CONTAINER (podman als die er is, anders docker)
 
 # migraties
 $DEV alembic revision --autogenerate -m "<omschrijving>"
 podman compose -f compose.dev.yml run --rm migrate
 ```
+
+## CI
+
+GitHub Actions (`.github/workflows/ci.yml`): lint, unit, integratie (compose.dev.yml
+met Docker, inclusief de trage tests, failover en secret-scan) en het image naar GHCR
+(`ghcr.io/<owner>/lamplighter`, alleen `main` en `v*`-tags). Actions pin je op commit-SHA.
 
 ## Conventies
 
