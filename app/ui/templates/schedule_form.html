@@ -1,9 +1,9 @@
 {% extends "base.html" %}
-{% block title %}{{ 'Schedule bewerken' if item else 'Nieuwe schedule' }} · ansible-scheduler{% endblock %}
+{% block title %}{{ 'Edit schedule' if item else 'New schedule' }} · ansible-scheduler{% endblock %}
 {% block content %}
 <div class="page-head">
-  <h1>{{ 'Schedule bewerken' if item else 'Nieuwe schedule' }}</h1>
-  <a class="button secondary" href="/ui/schedules">Annuleren</a>
+  <h1>{{ 'Edit schedule' if item else 'New schedule' }}</h1>
+  <a class="button secondary" href="/ui/schedules">Cancel</a>
 </div>
 {% if errors.get('__all__') %}<p class="error">{{ errors['__all__'] }}</p>{% endif %}
 <form class="card form" method="post" action="{{ '/ui/schedules/' ~ item.id if item else '/ui/schedules' }}">
@@ -15,17 +15,17 @@
     </select>{% with field='template_id' %}{% include "_field_error.html" %}{% endwith %}</label>
   <div class="row">
     <label>Cron <input name="cron" class="mono" value="{{ form.get('cron') or '' }}" placeholder="30 2 * * 1-5" required>
-      <small class="muted">minuut uur dag maand weekdag · weekdag 0/7 = zondag</small>
+      <small class="muted">minute hour day month weekday · weekday 0/7 = Sunday</small>
       {% with field='cron' %}{% include "_field_error.html" %}{% endwith %}</label>
-    <label>Tijdzone <input name="timezone" list="tz-list" value="{{ form.get('timezone') or 'UTC' }}">
+    <label>Time zone <input name="timezone" list="tz-list" value="{{ form.get('timezone') or 'UTC' }}">
       <datalist id="tz-list"><option value="UTC"><option value="Europe/Amsterdam"><option value="Europe/London"><option value="America/New_York"></datalist>
       {% with field='timezone' %}{% include "_field_error.html" %}{% endwith %}</label>
   </div>
   <div class="row">
     <label>Overlap
       <select name="overlap_policy">
-        <option value="skip" {% if form.get('overlap_policy') == 'skip' %}selected{% endif %}>skip: overslaan als de vorige nog loopt</option>
-        <option value="queue" {% if form.get('overlap_policy') == 'queue' %}selected{% endif %}>queue: wachten tot de vorige klaar is</option>
+        <option value="skip" {% if form.get('overlap_policy') == 'skip' %}selected{% endif %}>skip: skip if the previous run is still active</option>
+        <option value="queue" {% if form.get('overlap_policy') == 'queue' %}selected{% endif %}>queue: wait until the previous run has finished</option>
       </select></label>
     <label>Misfire grace (s) <input name="misfire_grace_s" type="number" min="1" value="{{ form.get('misfire_grace_s') or 60 }}">
       {% with field='misfire_grace_s' %}{% include "_field_error.html" %}{% endwith %}</label>
@@ -33,7 +33,7 @@
   <label>Extra vars override (JSON)
     <textarea name="extra_vars_override" rows="4" class="mono" placeholder='{"key": "value"}'>{{ form.get('extra_vars_override') or '' }}</textarea>
     {% with field='extra_vars_override' %}{% include "_field_error.html" %}{% endwith %}</label>
-  <label class="check"><input type="checkbox" name="enabled" {% if form.get('enabled') in [true, 'on'] %}checked{% endif %}> Actief</label>
-  <div class="form-actions"><button type="submit">Opslaan</button></div>
+  <label class="check"><input type="checkbox" name="enabled" {% if form.get('enabled') in [true, 'on'] %}checked{% endif %}> Enabled</label>
+  <div class="form-actions"><button type="submit">Save</button></div>
 </form>
 {% endblock %}

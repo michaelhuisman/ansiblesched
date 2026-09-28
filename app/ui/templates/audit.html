@@ -5,12 +5,12 @@
   <h1>Audit log</h1>
   <form class="filters" method="get" action="/ui/audit">
     <label>Actor <input name="actor" value="{{ actor_filter }}" placeholder="user:local:alice"></label>
-    <label>Actie <input name="action" value="{{ action }}" placeholder="bv. run. of login"></label>
+    <label>Action <input name="action" value="{{ action }}" placeholder="e.g. run. or login"></label>
     <button class="small secondary" type="submit">Filter</button>
   </form>
 </div>
 <table class="grid">
-  <thead><tr><th>Tijd (UTC)</th><th>Actor</th><th>Actie</th><th>Object</th><th>Details</th><th>IP</th></tr></thead>
+  <thead><tr><th>Time (UTC)</th><th>Actor</th><th>Action</th><th>Object</th><th>Details</th><th>IP</th></tr></thead>
   <tbody>
   {% for e in entries %}
     <tr>
@@ -22,7 +22,7 @@
       <td class="mono muted">{{ e.ip or '' }}</td>
     </tr>
   {% else %}
-    <tr><td colspan="6" class="empty">Geen regels.</td></tr>
+    <tr><td colspan="6" class="empty">No entries.</td></tr>
   {% endfor %}
   </tbody>
 </table>

@@ -4,7 +4,7 @@ import base64
 import json
 import logging
 import secrets
-from typing import Annotated
+from typing import Annotated, Any
 
 from fastapi import APIRouter, Form, Query, Request
 from fastapi.responses import HTMLResponse, Response
@@ -22,7 +22,7 @@ from app.core.auth import (
 )
 from app.core.config import Settings, get_settings
 from app.core.oidc import OidcError, PkcePair
-from app.models import ROLES
+from app.models import ROLES, User
 from app.services import api_tokens, audit, sessions, users
 from app.services.errors import ServiceError
 from app.ui.common import CanManageUsers, actor, redirect, render
@@ -34,6 +34,9 @@ router = APIRouter(prefix="/ui", include_in_schema=False)
 OIDC_COOKIE = "sched_oidc"
 OIDC_COOKIE_MAX_AGE = 600
 DEFAULT_NEXT = "/ui/runs"
+
+LOGIN_FAILED = "Invalid username or password, or the account is (temporarily) locked."
+PASSWORDS_DIFFER = "The passwords do not match."
 
 
 def safe_next(value: str | None) -> str:
@@ -102,9 +105,7 @@ def login_submit(
             code=401,
             next=safe_next(next),
             username=username,
-            error=(
-                "Onjuiste gebruikersnaam of wachtwoord, of het account is (tijdelijk) geblokkeerd."
-            ),
+            error=LOGIN_FAILED,
         )
     new = sessions.create(session, user.id, oidc_roles=[], max_s=settings.session_max_s)
     response = redirect(safe_next(next))
@@ -181,7 +182,7 @@ def _oidc_failed(request: Request, reason: str, session: SessionDep) -> Response
         None,
         code=401,
         next=DEFAULT_NEXT,
-        error="Inloggen via Keycloak is mislukt. Probeer het opnieuw.",
+        error="Sign-in with Keycloak failed. Please try again.",
     )
     response.delete_cookie(OIDC_COOKIE, path="/ui/auth")
     return response
@@ -235,7 +236,7 @@ def oidc_callback(
             None,
             code=403,
             next=DEFAULT_NEXT,
-            error="Je account heeft geen toegang tot ansible-scheduler (geen rol toegewezen).",
+            error="Your account has no access to ansible-scheduler (no role assigned).",
         )
     audit.record(session, who, "login", "user", user.id, {"method": "oidc", "roles": roles})
     session.commit()
@@ -247,6 +248,12 @@ def oidc_callback(
 
 
 # --- eigen account -----------------------------------------------------------------
+
+
+def _local_user_id(user: Principal) -> int:
+    if user.source != "local" or user.user_id is None:
+        raise PermissionDeniedError("only local users can do this")
+    return user.user_id
 
 
 def _account(
@@ -265,6 +272,31 @@ def account(request: Request, session: SessionDep, user: UserDep) -> HTMLRespons
     return _account(request, session, user)
 
 
+def _own_password_form(
+    request: Request, user: Principal, code: int = 200, error: str | None = None
+) -> HTMLResponse:
+    return render(
+        request,
+        "password_form.html",
+        user,
+        code=code,
+        title="Change password",
+        subject=None,
+        action="/ui/account/password",
+        back="/ui/account",
+        ask_current=True,
+        submit="Change password",
+        note="You will be signed out everywhere and need to sign in again.",
+        error=error,
+    )
+
+
+@router.get("/account/password", response_class=HTMLResponse)
+def change_password_page(request: Request, user: UserDep) -> HTMLResponse:
+    _local_user_id(user)
+    return _own_password_form(request, user)
+
+
 @router.post("/account/password", response_class=HTMLResponse)
 def change_password(
     request: Request,
@@ -272,16 +304,17 @@ def change_password(
     user: UserDep,
     current: Annotated[str, Form()] = "",
     new: Annotated[str, Form()] = "",
+    confirm: Annotated[str, Form()] = "",
 ) -> Response:
-    if user.source != "local" or user.user_id is None:
-        raise PermissionDeniedError("only local users have a password here")
-    me = users.get(session, user.user_id)
+    me = users.get(session, _local_user_id(user))
     if not users.verify_password(me, current):
-        return _account(request, session, user, code=400, pw_error="Huidig wachtwoord klopt niet.")
+        return _own_password_form(request, user, 400, "The current password is incorrect.")
+    if new != confirm:
+        return _own_password_form(request, user, 400, PASSWORDS_DIFFER)
     try:
         users.set_password(session, me.id, new, actor=actor(request, user))
     except ServiceError as exc:
-        return _account(request, session, user, code=400, pw_error=str(exc))
+        return _own_password_form(request, user, 400, str(exc))
     sessions.destroy_for_user(session, me.id)
     response = redirect("/ui/login")
     response.delete_cookie(SESSION_COOKIE, path="/")
@@ -296,13 +329,12 @@ def create_token(
     name: Annotated[str, Form()] = "",
     expires_days: Annotated[str, Form()] = "90",
 ) -> HTMLResponse:
-    if user.source != "local" or user.user_id is None:
-        raise PermissionDeniedError("API tokens are only for local users")
+    user_id = _local_user_id(user)
     days = int(expires_days) if expires_days.isdigit() else None
     try:
         new = api_tokens.create(
             session,
-            users.get(session, user.user_id),
+            users.get(session, user_id),
             name,
             expires_days=days,
             actor=actor(request, user),
@@ -314,85 +346,163 @@ def create_token(
 
 @router.post("/account/tokens/{token_id}/revoke", response_class=HTMLResponse)
 def revoke_token(request: Request, token_id: int, session: SessionDep, user: UserDep) -> Response:
-    if user.user_id is None:
-        raise PermissionDeniedError("no local user")
-    api_tokens.revoke(session, token_id, user_id=user.user_id, actor=actor(request, user))
+    api_tokens.revoke(session, token_id, user_id=_local_user_id(user), actor=actor(request, user))
     return redirect("/ui/account")
 
 
 # --- gebruikersbeheer (admin) --------------------------------------------------------
 
 
+def _user_form(
+    request: Request,
+    user: Principal,
+    item: User | None,
+    form: dict[str, Any],
+    code: int = 200,
+    error: str | None = None,
+) -> HTMLResponse:
+    return render(
+        request,
+        "user_form.html",
+        user,
+        code=code,
+        item=item,
+        editing=item is not None,
+        form=form,
+        roles=ROLES,
+        error=error,
+    )
+
+
+def _roles(values: list[Any]) -> list[str]:
+    return [r for r in values if isinstance(r, str)]
+
+
 @router.get("/users", response_class=HTMLResponse)
 def users_page(request: Request, session: SessionDep, user: CanManageUsers) -> HTMLResponse:
-    return render(request, "users.html", user, users=users.list_users(session), roles=ROLES)
+    return render(request, "users.html", user, users=users.list_users(session))
+
+
+@router.get("/users/new", response_class=HTMLResponse)
+def user_new(request: Request, user: CanManageUsers) -> HTMLResponse:
+    return _user_form(request, user, None, {"roles": ["viewer"]})
 
 
 @router.post("/users", response_class=HTMLResponse)
 async def user_create(request: Request, session: SessionDep, user: CanManageUsers) -> Response:
     form = await request.form()
-    roles = [r for r in form.getlist("roles") if isinstance(r, str)]
+    username = str(form.get("username", ""))
+    display_name = str(form.get("display_name", ""))
+    roles = _roles(form.getlist("roles"))
+    values = {"username": username, "display_name": display_name, "roles": roles}
+    password = str(form.get("password", ""))
+    if password != str(form.get("password_confirm", "")):
+        return _user_form(request, user, None, values, 400, PASSWORDS_DIFFER)
     try:
         users.create_local(
             session,
-            str(form.get("username", "")),
-            str(form.get("password", "")),
+            username,
+            password,
             roles,
-            display_name=str(form.get("display_name", "")) or None,
+            display_name=display_name or None,
             actor=actor(request, user),
         )
     except ServiceError as exc:
-        return render(
-            request,
-            "users.html",
-            user,
-            code=400,
-            users=users.list_users(session),
-            roles=ROLES,
-            create_error=str(exc),
-            form=dict(form),
-        )
+        return _user_form(request, user, None, values, 400, str(exc))
     return redirect("/ui/users")
+
+
+@router.get("/users/{user_id}/edit", response_class=HTMLResponse)
+def user_edit(
+    request: Request, user_id: int, session: SessionDep, user: CanManageUsers
+) -> HTMLResponse:
+    item = users.get(session, user_id)
+    form = {"display_name": item.display_name, "roles": item.roles, "disabled": item.disabled}
+    return _user_form(request, user, item, form)
 
 
 @router.post("/users/{user_id}", response_class=HTMLResponse)
 async def user_update(
     request: Request, user_id: int, session: SessionDep, user: CanManageUsers
 ) -> Response:
+    item = users.get(session, user_id)
     form = await request.form()
-    roles = [r for r in form.getlist("roles") if isinstance(r, str)]
+    display_name = str(form.get("display_name", ""))
+    roles = _roles(form.getlist("roles"))
     disabled = form.get("disabled") == "on"
+    values = {"display_name": display_name, "roles": roles, "disabled": disabled}
     if user.user_id == user_id and (disabled or "admin" not in roles):
-        return render(
+        return _user_form(
             request,
-            "users.html",
             user,
-            code=400,
-            users=users.list_users(session),
-            roles=ROLES,
-            row_error={user_id: "Je kunt je eigen admin-rol of account niet uitschakelen."},
+            item,
+            values,
+            400,
+            "You cannot remove your own admin role or disable yourself.",
         )
     try:
         users.update_local(
-            session, user_id, roles=roles, disabled=disabled, actor=actor(request, user)
+            session,
+            user_id,
+            roles=roles,
+            disabled=disabled,
+            display_name=display_name,
+            actor=actor(request, user),
         )
-        if disabled:
-            sessions.destroy_for_user(session, user_id)
-        new_password = str(form.get("new_password", ""))
-        if new_password:
-            users.set_password(session, user_id, new_password, actor=actor(request, user))
-            sessions.destroy_for_user(session, user_id)
     except ServiceError as exc:
-        return render(
-            request,
-            "users.html",
-            user,
-            code=400,
-            users=users.list_users(session),
-            roles=ROLES,
-            row_error={user_id: str(exc)},
-        )
+        return _user_form(request, user, item, values, 400, str(exc))
+    if disabled:
+        sessions.destroy_for_user(session, user_id)
     return redirect("/ui/users")
+
+
+def _reset_password_form(
+    request: Request, user: Principal, item: User, code: int = 200, error: str | None = None
+) -> HTMLResponse:
+    return render(
+        request,
+        "password_form.html",
+        user,
+        code=code,
+        title="Reset password",
+        subject=item.display_name or item.username,
+        action=f"/ui/users/{item.id}/password",
+        back=f"/ui/users/{item.id}/edit",
+        ask_current=False,
+        submit="Reset password",
+        note="The user is signed out everywhere. Existing API tokens stay valid.",
+        error=error,
+    )
+
+
+@router.get("/users/{user_id}/password", response_class=HTMLResponse)
+def user_password_page(
+    request: Request, user_id: int, session: SessionDep, user: CanManageUsers
+) -> HTMLResponse:
+    item = users.get(session, user_id)
+    if item.source != "local":
+        raise PermissionDeniedError("OIDC users have no local password")
+    return _reset_password_form(request, user, item)
+
+
+@router.post("/users/{user_id}/password", response_class=HTMLResponse)
+def user_password_reset(
+    request: Request,
+    user_id: int,
+    session: SessionDep,
+    user: CanManageUsers,
+    new: Annotated[str, Form()] = "",
+    confirm: Annotated[str, Form()] = "",
+) -> Response:
+    item = users.get(session, user_id)
+    if new != confirm:
+        return _reset_password_form(request, user, item, 400, PASSWORDS_DIFFER)
+    try:
+        users.set_password(session, user_id, new, actor=actor(request, user))
+    except ServiceError as exc:
+        return _reset_password_form(request, user, item, 400, str(exc))
+    sessions.destroy_for_user(session, user_id)
+    return redirect(f"/ui/users/{user_id}/edit")
 
 
 # --- audit log (admin) ----------------------------------------------------------------

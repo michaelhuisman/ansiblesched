@@ -52,10 +52,10 @@ async def _not_authenticated(request: Request, exc: Exception) -> Response:
 async def _permission_denied(request: Request, exc: Exception) -> Response:
     if _is_ui(request):
         return HTMLResponse(
-            "<!doctype html><title>Geen toegang</title>"
+            '<!doctype html><html lang="en"><title>Access denied</title>'
             '<link rel="stylesheet" href="/ui/static/app.css">'
-            '<main><h1>Geen toegang</h1><p class="muted">Je hebt hiervoor niet de juiste rol.</p>'
-            '<p><a href="/ui/runs">Terug</a></p></main>',
+            '<main><h1>Access denied</h1><p class="muted">You do not have the required role.</p>'
+            '<p><a href="/ui/runs">Back</a></p></main>',
             status_code=status.HTTP_403_FORBIDDEN,
         )
     return JSONResponse(status_code=status.HTTP_403_FORBIDDEN, content={"detail": str(exc)})

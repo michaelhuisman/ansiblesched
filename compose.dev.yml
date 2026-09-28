@@ -16,6 +16,10 @@ x-app: &app
     SCHED_WEBHOOK_SECRET: dev-webhook-secret
     # Dev draait via http; in productie blijft dit true.
     SCHED_SESSION_COOKIE_SECURE: "false"
+  # Broncode gemount: na een codewijziging volstaat een herstart (geen rebuild).
+  volumes:
+    - ./app:/app/app:ro
+    - ./migrations:/app/migrations:ro
   depends_on:
     postgres:
       condition: service_healthy
@@ -117,6 +121,8 @@ services:
       GIT_CONFIG_KEY_0: safe.directory
       GIT_CONFIG_VALUE_0: "*"
     volumes:
+      - ./app:/app/app:ro
+      - ./migrations:/app/migrations:ro
       - runtime:/run/scheduler
       - fixtures:/fixtures:ro
       - ./.dev/secrets:/secrets:ro

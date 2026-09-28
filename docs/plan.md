@@ -305,7 +305,7 @@ queue-diepte, laatste succesvolle run per schedule) en webhook-notificaties bij
 `failed`, `error` en `timeout`.
 
 **Uitwerking**
-- **UI:** server-rendered met Jinja2 en htmx (2.0.11, vendored in `app/ui/static`, geen
+- **UI:** Engelstalig, server-rendered met Jinja2 en htmx (2.0.11, vendored in `app/ui/static`, geen
   Node-toolchain). Onder `/ui`. Formulieren valideren met dezelfde pydantic-schema's als
   de API.
 - **SSE:** `GET /api/v1/runs/{id}/stream` stuurt `run_event` (id = seq), `status` en

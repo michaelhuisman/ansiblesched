@@ -293,7 +293,7 @@ def test_ui_login_and_logout(local_users: dict[str, LocalUser]) -> None:
     page = ui.get("/runs")
     assert page.status_code == 200
     assert "it-viewer" in page.text
-    assert "Nieuw template" not in ui.get("/templates").text  # viewer: geen beheerknoppen
+    assert "New template" not in ui.get("/templates").text  # viewer: geen beheerknoppen
     assert ui.get("/templates/new").status_code == 403
 
     assert ui.post("/logout").status_code == 303
@@ -309,12 +309,14 @@ def test_ui_login_wrong_password_and_lockout() -> None:
     for _ in range(5):
         resp = c.post("/login", data={"username": user.username, "password": "wrong-password!"})
         assert resp.status_code == 401
-        assert "Onjuiste gebruikersnaam" in resp.text
+        assert "Invalid username or password" in resp.text
     locked = c.post("/login", data={"username": user.username, "password": user.password})
     assert locked.status_code == 401, "account should be locked"
     unknown = c.post("/login", data={"username": unique("nobody"), "password": "whatever-123"})
     assert unknown.status_code == 401
-    assert unknown.text.count("Onjuiste gebruikersnaam") == 1  # zelfde melding: geen enumeratie
+    assert (
+        unknown.text.count("Invalid username or password") == 1
+    )  # zelfde melding: geen enumeratie
 
     with get_sessionmaker()() as s:
         reasons = [
@@ -385,6 +387,91 @@ def test_ui_admin_cannot_lock_self_out(admin: LocalUser, env: Env) -> None:
     assert env.api.get(f"/users/{admin_id}").json()["roles"] == ["admin"]
 
 
+# --- UI: gebruikersbeheer en wachtwoorden ----------------------------------------------
+
+
+def test_ui_users_list_layout(admin: LocalUser) -> None:
+    ui = login_ui(admin.username, admin.password)
+    page = ui.get("/users").text
+    assert 'href="/ui/users/new"' in page
+    headers = re.findall(r"<th>([^<]*)</th>", page)
+    assert headers[-1].startswith("Last login")
+    assert "<form" not in page.split("<table", 1)[1].split("</table>", 1)[0]  # geen inline forms
+
+
+def test_ui_add_local_user(admin: LocalUser) -> None:
+    ui = login_ui(admin.username, admin.password)
+    assert ui.get("/users/new").status_code == 200
+    name = unique("it-ui").lower()
+    base = {"username": name, "display_name": "UI Test", "roles": ["operator"]}
+
+    mismatch = ui.post("/users", data={**base, "password": "p" * 12, "password_confirm": "q" * 12})
+    assert mismatch.status_code == 400
+    assert "do not match" in mismatch.text
+    assert name in mismatch.text  # ingevulde waarden blijven staan
+
+    short = ui.post("/users", data={**base, "password": "short", "password_confirm": "short"})
+    assert short.status_code == 400
+    assert "at least 12" in short.text
+
+    ok = ui.post("/users", data={**base, "password": "p" * 12, "password_confirm": "p" * 12})
+    assert ok.status_code == 303
+    assert ok.headers["location"] == "/ui/users"
+    assert login_ui(name, "p" * 12).get("/runs").status_code == 200
+
+
+def test_ui_edit_user_and_reset_password(admin: LocalUser, env: Env) -> None:
+    target = ensure_local_user(unique("it-edit"), ["viewer"])
+    user_id = next(
+        u["id"] for u in env.api.get("/users").json() if u["username"] == target.username
+    )
+    ui = login_ui(admin.username, admin.password)
+
+    edit = ui.get(f"/users/{user_id}/edit")
+    assert edit.status_code == 200
+    assert f'href="/ui/users/{user_id}/password"' in edit.text
+    saved = ui.post(
+        f"/users/{user_id}", data={"display_name": "Edited", "roles": ["viewer", "operator"]}
+    )
+    assert saved.status_code == 303
+    after = env.api.get(f"/users/{user_id}").json()
+    assert after["roles"] == ["operator", "viewer"]
+    assert after["display_name"] == "Edited"
+
+    target_ui = login_ui(target.username, target.password)
+    assert ui.get(f"/users/{user_id}/password").status_code == 200
+    bad = ui.post(f"/users/{user_id}/password", data={"new": "n" * 12, "confirm": "m" * 12})
+    assert bad.status_code == 400
+    assert "do not match" in bad.text
+    reset = ui.post(f"/users/{user_id}/password", data={"new": "n" * 12, "confirm": "n" * 12})
+    assert reset.status_code == 303
+    assert target_ui.get("/runs").status_code == 303  # sessie van de gebruiker vervallen
+    assert login_ui(target.username, "n" * 12).get("/runs").status_code == 200
+
+
+def test_ui_change_own_password(env: Env) -> None:
+    me = ensure_local_user(unique("it-own"), ["viewer"])
+    ui = login_ui(me.username, me.password)
+    assert 'href="/ui/account/password"' in ui.get("/account").text
+    assert ui.get("/account/password").status_code == 200
+
+    wrong = ui.post(
+        "/account/password", data={"current": "nope", "new": "x" * 12, "confirm": "x" * 12}
+    )
+    assert wrong.status_code == 400
+    assert "current password is incorrect" in wrong.text
+    differ = ui.post(
+        "/account/password", data={"current": me.password, "new": "x" * 12, "confirm": "y" * 12}
+    )
+    assert differ.status_code == 400
+    ok = ui.post(
+        "/account/password", data={"current": me.password, "new": "x" * 12, "confirm": "x" * 12}
+    )
+    assert ok.status_code == 303
+    assert ok.headers["location"] == "/ui/login"
+    assert login_ui(me.username, "x" * 12).get("/runs").status_code == 200
+
+
 # --- OIDC: volledige browserflow (authorization code + PKCE) -----------------------------
 
 
@@ -426,7 +513,7 @@ def test_oidc_login_flow() -> None:
 def test_oidc_login_without_role_is_refused() -> None:
     resp = oidc_browser_login("kc-norole")
     assert resp.status_code == 403
-    assert "geen rol" in resp.text
+    assert "no role" in resp.text
 
 
 def test_oidc_callback_rejects_bad_state() -> None:

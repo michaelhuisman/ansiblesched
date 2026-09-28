@@ -1,48 +1,27 @@
 {% extends "base.html" %}
-{% block title %}Gebruikers · ansible-scheduler{% endblock %}
+{% block title %}Users · ansible-scheduler{% endblock %}
 {% block content %}
-<div class="page-head"><h1>Gebruikers</h1></div>
+<div class="page-head">
+  <h1>Users</h1>
+  <a class="button" href="/ui/users/new">Add local user</a>
+</div>
 <table class="grid">
-  <thead><tr><th>Gebruiker</th><th>Bron</th><th>Rollen</th><th>Laatste login</th><th>Status</th><th></th></tr></thead>
+  <thead><tr><th>User</th><th>Source</th><th>Roles</th><th>Status</th><th>Last login (UTC)</th></tr></thead>
   <tbody>
   {% for u in users %}
     <tr>
-      <td>{{ u.display_name or u.username }}{% if u.display_name and u.source == 'local' %} <span class="muted mono">{{ u.username }}</span>{% endif %}</td>
-      <td>{{ 'lokaal' if u.source == 'local' else 'Keycloak' }}</td>
-      {% if u.source == 'local' %}
-      <td colspan="4">
-        <form method="post" action="/ui/users/{{ u.id }}" class="user-row">
-          {% include "_csrf.html" %}
-          <span class="roles">{% for r in roles %}
-            <label class="check"><input type="checkbox" name="roles" value="{{ r }}" {% if r in u.roles %}checked{% endif %}> {{ r }}</label>
-          {% endfor %}</span>
-          <span class="mono muted">{{ u.last_login_at | dt or '–' }}</span>
-          <label class="check"><input type="checkbox" name="disabled" {% if u.disabled %}checked{% endif %}> uitgeschakeld</label>
-          <input name="new_password" type="password" minlength="12" placeholder="nieuw wachtwoord (optioneel)" autocomplete="new-password">
-          <button class="small" type="submit">Opslaan</button>
-          {% if row_error and row_error.get(u.id) %}<span class="field-error">{{ row_error[u.id] }}</span>{% endif %}
-        </form>
+      <td>
+        <a href="/ui/users/{{ u.id }}/edit">{{ u.display_name or u.username }}</a>
+        {% if u.display_name and u.source == 'local' %}<span class="muted mono">{{ u.username }}</span>{% endif %}
       </td>
-      {% else %}
-      <td class="muted">uit token</td>
+      <td>{{ 'local' if u.source == 'local' else 'Keycloak' }}</td>
+      <td>{% if u.source == 'local' %}{{ u.roles | join(', ') or '–' }}{% else %}<span class="muted">from token</span>{% endif %}</td>
+      <td>{% if u.disabled %}<span class="badge status-failed">disabled</span>{% else %}<span class="badge status-successful">active</span>{% endif %}</td>
       <td class="mono muted">{{ u.last_login_at | dt or '–' }}</td>
-      <td>{{ 'uitgeschakeld' if u.disabled else 'actief' }}</td><td></td>
-      {% endif %}
     </tr>
+  {% else %}
+    <tr><td colspan="5" class="empty">No users yet.</td></tr>
   {% endfor %}
   </tbody>
 </table>
-
-<h2 class="section">Lokale gebruiker toevoegen</h2>
-<form class="card form" method="post" action="/ui/users">
-  {% include "_csrf.html" %}
-  <div class="row">
-    <label>Gebruikersnaam <input name="username" value="{{ (form or {}).get('username', '') }}" pattern="[a-z0-9][a-z0-9._\-]{1,63}" required></label>
-    <label>Weergavenaam <input name="display_name" value="{{ (form or {}).get('display_name', '') }}"></label>
-  </div>
-  <label>Wachtwoord <input name="password" type="password" minlength="12" autocomplete="new-password" required></label>
-  <div class="roles">{% for r in roles %}<label class="check"><input type="checkbox" name="roles" value="{{ r }}"> {{ r }}</label>{% endfor %}</div>
-  {% if create_error %}<p class="error">{{ create_error }}</p>{% endif %}
-  <div class="form-actions"><button type="submit">Toevoegen</button></div>
-</form>
 {% endblock %}

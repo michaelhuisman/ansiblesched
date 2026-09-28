@@ -51,6 +51,8 @@ draait in de `dev`-container (Python 3.12, broncode gemount); lokaal is geen 3.1
 ```bash
 # dev-omgeving (eenmalig: scripts/dev-keys.sh)
 podman compose -f compose.dev.yml up -d --build --scale worker=2 --scale scheduler=2
+# na een codewijziging: herstart volstaat (app/ en migrations/ zijn gemount)
+podman compose -f compose.dev.yml restart api worker scheduler
 # eerste lokale admin (wachtwoord via prompt)
 podman compose -f compose.dev.yml run --rm dev python -m app create-user admin --role admin
 
@@ -78,6 +80,7 @@ podman compose -f compose.dev.yml run --rm migrate
   buiten tests.
 - Tijd altijd timezone-aware in UTC opslaan. Een schedule heeft een eigen tijdzoneveld.
 - Logging via stdlib `logging` in JSON-formaat naar stdout. Geen `print`.
+- UI-teksten zijn Engels; code-commentaar en docs zijn Nederlands.
 - De worker voert ansible-runner uit zonder process isolation
   (`process_isolation=False`). Ansible draait direct in de worker-container.
 - De private data dir van ansible-runner staat onder `SCHED_RUNTIME_DIR` (tmpfs) en

@@ -3,10 +3,10 @@
 {% block content %}
 <div class="page-head">
   <h1>Templates</h1>
-  {% if user.can(Action.CONFIGURE) %}<a class="button" href="/ui/templates/new">Nieuw template</a>{% endif %}
+  {% if user.can(Action.CONFIGURE) %}<a class="button" href="/ui/templates/new">New template</a>{% endif %}
 </div>
 <table class="grid">
-  <thead><tr><th>Naam</th><th>Project</th><th>Playbook</th><th>Limit</th><th>Timeout</th><th></th></tr></thead>
+  <thead><tr><th>Name</th><th>Project</th><th>Playbook</th><th>Limit</th><th>Timeout</th><th></th></tr></thead>
   <tbody>
   {% for t in templates %}
     <tr>
@@ -19,15 +19,15 @@
         {% if user.can(Action.LAUNCH) %}<a class="button small" href="/ui/templates/{{ t.id }}/launch">Launch</a>{% endif %}
         <a class="button small secondary" href="/ui/runs?template_id={{ t.id }}">Runs</a>
         {% if user.can(Action.CONFIGURE) %}
-          <a class="button small secondary" href="/ui/templates/{{ t.id }}/edit">Bewerken</a>
+          <a class="button small secondary" href="/ui/templates/{{ t.id }}/edit">Edit</a>
           <button class="small danger" hx-post="/ui/templates/{{ t.id }}/delete" hx-target="next .row-error"
-                  hx-confirm="Template '{{ t.name }}' verwijderen?">Verwijderen</button>
+                  hx-confirm="Delete template '{{ t.name }}'?">Delete</button>
           <span class="row-error"></span>
         {% endif %}
       </td>
     </tr>
   {% else %}
-    <tr><td colspan="6" class="empty">Nog geen templates.</td></tr>
+    <tr><td colspan="6" class="empty">No templates yet.</td></tr>
   {% endfor %}
   </tbody>
 </table>

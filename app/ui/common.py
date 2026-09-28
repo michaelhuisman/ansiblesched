@@ -91,10 +91,10 @@ def parse_json(value: str | None, field: str, errors: dict[str, str]) -> dict[st
     try:
         parsed = json.loads(value)
     except json.JSONDecodeError as exc:
-        errors[field] = f"ongeldige JSON: {exc.msg}"
+        errors[field] = f"invalid JSON: {exc.msg}"
         return {}
     if not isinstance(parsed, dict):
-        errors[field] = "moet een JSON-object zijn"
+        errors[field] = "must be a JSON object"
         return {}
     return parsed
 

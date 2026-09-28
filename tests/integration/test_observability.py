@@ -259,7 +259,7 @@ def test_ui_template_create_validation_and_launch(ui: httpx.Client, env: Env) ->
     }
     bad = ui.post("/templates", data=form)
     assert bad.status_code == 422
-    assert "ongeldige JSON" in bad.text
+    assert "invalid JSON" in bad.text
     assert name in bad.text  # ingevulde waarden blijven staan
 
     form["extra_vars"] = '{"greeting": "<script>alert(1)</script>"}'
@@ -318,7 +318,7 @@ def test_ui_cancel_running_run(ui: httpx.Client, env: Env) -> None:
     env.wait(run_id, {"running"})
     resp = ui.post(f"/runs/{run_id}/cancel")
     assert resp.status_code == 200
-    assert "annuleren aangevraagd" in resp.text
+    assert "cancel requested" in resp.text
     assert env.wait(run_id, timeout=30)["status"] == "canceled"
 
 

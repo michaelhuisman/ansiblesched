@@ -115,3 +115,11 @@ pre.token { background: var(--log-bg); color: var(--log-text); padding: 10px 12p
 .roles { display: inline-flex; gap: 12px; }
 .check { display: inline-flex; align-items: center; gap: 4px; font-weight: 400; }
 .small-text { font-size: 12px; max-width: 360px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.head-actions { display: flex; gap: 8px; }
+.form.narrow { max-width: 480px; }
+fieldset.roles-field { border: 1px solid var(--border); border-radius: 6px; padding: 8px 12px 10px;
+  display: flex; gap: 16px; flex-wrap: wrap; align-items: center; margin: 0; }
+fieldset.roles-field legend { font-weight: 600; padding: 0 4px; }
+fieldset.roles-field label.check { flex: 0 0 auto; }
+fieldset.roles-field small { flex-basis: 100%; }
