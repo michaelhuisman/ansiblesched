@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+{% block title %}Projects · ansible-scheduler{% endblock %}
+{% block content %}
+<div class="page-head">
+  <h1>Projects</h1>
+  {% if user.can(Action.CONFIGURE) %}<a class="button" href="/ui/projects/new">New project</a>{% endif %}
+</div>
+<p class="muted intro">A project is a git repository with playbooks (and optionally inventories). Runs check out the branch head.</p>
+<table class="grid">
+  <thead><tr><th>Name</th><th>Git URL</th><th>Branch</th><th>Credential</th><th></th></tr></thead>
+  <tbody>
+  {% for p in items %}
+    <tr>
+      <td>{{ p.name }}</td>
+      <td class="mono">{{ p.git_url }}</td>
+      <td class="mono">{{ p.branch }}</td>
+      <td class="muted">{{ credential_names.get(p.credential_id, '–') if p.credential_id else 'none (public)' }}</td>
+      <td class="actions">
+        {% if user.can(Action.CONFIGURE) %}
+          <a class="button small secondary" href="/ui/projects/{{ p.id }}/edit">Edit</a>
+          <button class="small danger" hx-post="/ui/projects/{{ p.id }}/delete" hx-target="next .row-error"
+                  hx-confirm="Delete project '{{ p.name }}'?">Delete</button>
+          <span class="row-error"></span>
+        {% endif %}
+      </td>
+    </tr>
+  {% else %}
+    <tr><td colspan="5" class="empty">No projects yet.</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% endblock %}

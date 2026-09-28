@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% block title %}{{ 'Edit project' if item else 'New project' }} · ansible-scheduler{% endblock %}
+{% block content %}
+<div class="page-head">
+  <h1>{{ 'Edit project' if item else 'New project' }}</h1>
+  <a class="button secondary" href="/ui/projects">Cancel</a>
+</div>
+{% if errors.get('__all__') %}<p class="error">{{ errors['__all__'] }}</p>{% endif %}
+<form class="card form" method="post" action="{{ '/ui/projects/' ~ item.id if item else '/ui/projects' }}">
+  {% include "_csrf.html" %}
+  <label>Name <input name="name" value="{{ form.get('name') or '' }}" required>
+    {% with field='name' %}{% include "_field_error.html" %}{% endwith %}</label>
+  <div class="row">
+    <label class="grow">Git URL <input name="git_url" class="mono" value="{{ form.get('git_url') or '' }}"
+                          placeholder="https://gitlab.example.com/team/playbooks.git" required>
+      <small class="muted">HTTPS URL, reachable from the worker. SSH URLs (git@…) are not supported.</small>
+      {% with field='git_url' %}{% include "_field_error.html" %}{% endwith %}</label>
+    <label>Branch <input name="branch" class="mono" value="{{ form.get('branch') or 'main' }}" required>
+      {% with field='branch' %}{% include "_field_error.html" %}{% endwith %}</label>
+  </div>
+  <label>Git credential
+    <select name="credential_id">
+      <option value="">none (public repository)</option>
+      {% for c in git_credentials %}<option value="{{ c.id }}" {% if form.get('credential_id')|string == c.id|string %}selected{% endif %}>{{ c.name }}</option>{% endfor %}
+    </select>
+    <small class="muted">Only credentials of type <span class="mono">git_token</span>. <a href="/ui/credentials/new">Add one</a></small>
+    {% with field='credential_id' %}{% include "_field_error.html" %}{% endwith %}</label>
+  <div class="form-actions"><button type="submit">Save</button></div>
+</form>
+{% endblock %}

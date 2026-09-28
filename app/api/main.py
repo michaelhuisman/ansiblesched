@@ -14,6 +14,7 @@ from app.core.db import get_engine, get_sessionmaker
 from app.services.errors import ConflictError, InvalidReferenceError, NotFoundError, ServiceError
 from app.services.metrics import build_registry
 from app.ui import auth_routes as ui_auth
+from app.ui import config_routes as ui_config
 from app.ui import routes as ui
 from app.ui.common import STATIC_DIR
 
@@ -75,6 +76,7 @@ def create_app() -> FastAPI:
     app.include_router(v1)
     app.include_router(ui.router)
     app.include_router(ui_auth.router)
+    app.include_router(ui_config.router)
     app.mount("/ui/static", StaticFiles(directory=STATIC_DIR), name="static")
     registry = build_registry(get_sessionmaker())
 

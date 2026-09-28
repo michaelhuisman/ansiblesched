@@ -123,3 +123,25 @@ fieldset.roles-field { border: 1px solid var(--border); border-radius: 6px; padd
 fieldset.roles-field legend { font-weight: 600; padding: 0 4px; }
 fieldset.roles-field label.check { flex: 0 0 auto; }
 fieldset.roles-field small { flex-basis: 100%; }
+
+/* --- projecten, inventories, credentials --- */
+p.intro { margin: -4px 0 16px; }
+.form label.grow { flex: 2; }
+.prefixed { display: flex; align-items: stretch; }
+.prefixed .prefix { display: flex; align-items: center; padding: 0 8px; border: 1px solid var(--border);
+  border-right: none; border-radius: 6px 0 0 6px; background: var(--bg); color: var(--muted); }
+.prefixed input { flex: 1; border-radius: 0 6px 6px 0; }
+.help { border: 1px dashed var(--border); border-radius: 8px; padding: 10px 14px; font-weight: 400; }
+.help p { margin: 0 0 8px; }
+table.grid.compact th, table.grid.compact td { padding: 4px 10px; }
+fieldset.choice { border: 1px solid var(--border); border-radius: 6px; padding: 8px 12px 10px;
+  display: flex; gap: 20px; flex-wrap: wrap; margin: 0; }
+fieldset.choice legend { font-weight: 600; padding: 0 4px; }
+fieldset.choice label.check { flex: 0 0 auto; }
+[hidden] { display: none !important; }
+
+/* Topbalk: niets laten afbreken; de navigatie scrollt horizontaal als het echt krap wordt. */
+.topbar { gap: 16px; }
+.brand, .topbar .user, .topbar button { white-space: nowrap; }
+.topbar nav { overflow-x: auto; scrollbar-width: none; }
+.topbar nav a { padding: 6px 10px; white-space: nowrap; }

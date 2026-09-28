@@ -309,6 +309,9 @@ queue-diepte, laatste succesvolle run per schedule) en webhook-notificaties bij
 - **UI:** Engelstalig, server-rendered met Jinja2 en htmx (2.0.11, vendored in `app/ui/static`, geen
   Node-toolchain). Onder `/ui`. Formulieren valideren met dezelfde pydantic-schema's als
   de API.
+- **Beheer in de UI:** runs, templates, schedules, projecten, inventories en credentials
+  (alleen referenties naar OpenBao; de UI vraagt nooit om secretwaarden). Voor admins
+  ook gebruikers en de audit log.
 - **SSE:** `GET /api/v1/runs/{id}/stream` stuurt `run_event` (id = seq), `status` en
   `end`. De server pollt `run_events` elke 0,5s. Herverbinden gaat verder vanaf
   `Last-Event-ID`. In de UI via `EventSource`; in fase 4 werkt dat met een sessiecookie

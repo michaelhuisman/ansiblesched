@@ -17,6 +17,9 @@
       <a href="/ui/runs" {% if section == 'runs' %}aria-current="page"{% endif %}>Runs</a>
       <a href="/ui/templates" {% if section == 'templates' %}aria-current="page"{% endif %}>Templates</a>
       <a href="/ui/schedules" {% if section == 'schedules' %}aria-current="page"{% endif %}>Schedules</a>
+      <a href="/ui/projects" {% if section == 'projects' %}aria-current="page"{% endif %}>Projects</a>
+      <a href="/ui/inventories" {% if section == 'inventories' %}aria-current="page"{% endif %}>Inventories</a>
+      <a href="/ui/credentials" {% if section == 'credentials' %}aria-current="page"{% endif %}>Credentials</a>
       {% if user.can(Action.MANAGE_USERS) %}
         <a href="/ui/users" {% if section == 'users' %}aria-current="page"{% endif %}>Users</a>
         <a href="/ui/audit" {% if section == 'audit' %}aria-current="page"{% endif %}>Audit</a>

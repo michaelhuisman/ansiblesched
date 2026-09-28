@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+{% block title %}{{ 'Edit inventory' if item else 'New inventory' }} · ansible-scheduler{% endblock %}
+{% block content %}
+<div class="page-head">
+  <h1>{{ 'Edit inventory' if item else 'New inventory' }}</h1>
+  <a class="button secondary" href="/ui/inventories">Cancel</a>
+</div>
+{% if errors.get('__all__') %}<p class="error">{{ errors['__all__'] }}</p>{% endif %}
+{% set source = form.get('source_type') or 'project_file' %}
+<form class="card form" method="post" action="{{ '/ui/inventories/' ~ item.id if item else '/ui/inventories' }}"
+      data-inventory-form>
+  {% include "_csrf.html" %}
+  <label>Name <input name="name" value="{{ form.get('name') or '' }}" required>
+    {% with field='name' %}{% include "_field_error.html" %}{% endwith %}</label>
+  <fieldset class="choice">
+    <legend>Source</legend>
+    <label class="check"><input type="radio" name="source_type" value="project_file" {% if source == 'project_file' %}checked{% endif %}> File in a project repository</label>
+    <label class="check"><input type="radio" name="source_type" value="inline" {% if source == 'inline' %}checked{% endif %}> Inline (typed here)</label>
+  </fieldset>
+  <div class="row" data-source="project_file" {% if source != 'project_file' %}hidden{% endif %}>
+    <label>Project
+      <select name="project_id">
+        <option value="">—</option>
+        {% for p in projects %}<option value="{{ p.id }}" {% if form.get('project_id')|string == p.id|string %}selected{% endif %}>{{ p.name }}</option>{% endfor %}
+      </select>{% with field='project_id' %}{% include "_field_error.html" %}{% endwith %}</label>
+    <label class="grow">Path in repository <input name="path" class="mono" value="{{ form.get('path') or '' }}" placeholder="inventories/prod/hosts.ini">
+      <small class="muted">Relative to the repository root. INI or YAML, or a directory.</small>
+      {% with field='path' %}{% include "_field_error.html" %}{% endwith %}</label>
+  </div>
+  <label data-source="inline" {% if source != 'inline' %}hidden{% endif %}>Inventory
+    <textarea name="content" rows="10" class="mono" placeholder="[web]&#10;web1.example.com ansible_user=deploy">{{ form.get('content') or '' }}</textarea>
+    {% with field='content' %}{% include "_field_error.html" %}{% endwith %}</label>
+  <div class="form-actions"><button type="submit">Save</button></div>
+</form>
+<script src="/ui/static/inventory-form.js" defer></script>
+{% endblock %}
