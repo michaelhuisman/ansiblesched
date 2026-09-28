@@ -1,0 +1,8 @@
+---
+# Install or update lamplighter:
+#   ansible-playbook site.yml -i <inventory> -e lamplighter_image_tag=<git-sha>
+- name: Deploy lamplighter
+  hosts: lamplighter
+  become: true
+  roles:
+    - lamplighter

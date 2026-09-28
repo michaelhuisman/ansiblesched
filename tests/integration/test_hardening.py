@@ -15,8 +15,16 @@ from sqlalchemy import insert, select, text
 
 from app.core import locks
 from app.core.db import connect_raw, get_engine, get_sessionmaker
-from app.models import AuditEntry, Notification, Run, RunEvent, RunStatsArchive
-from app.services import retention
+from app.models import (
+    AuditEntry,
+    MaintenanceStatus,
+    Notification,
+    Run,
+    RunEvent,
+    RunStatsArchive,
+)
+from app.scheduler import jobs
+from app.services import maintenance, retention
 from tests.integration.conftest import API_URL, SECRETS_DIR, Env, post, unique
 from tests.integration.test_openbao import OPENBAO, put
 
@@ -145,6 +153,36 @@ def test_audit_retention(env: Env) -> None:
     with get_sessionmaker()() as s:
         retention.run_all(s, events_days=0, runs_days=0, audit_days=365, tokens_days=0)
     assert _count(AuditEntry, AuditEntry.action == marker) == 0
+
+
+def test_retention_job_records_maintenance_status() -> None:
+    jobs.run_retention()
+    with get_sessionmaker()() as s:
+        row = s.get(MaintenanceStatus, "retention")
+    assert row is not None
+    assert row.last_status == "ok"
+    assert row.last_success_at is not None
+    assert set(row.details) == {"events", "runs", "audit", "tokens"}
+    assert metric("lamplighter_maintenance_last_attempt_failed", task="retention") == 0
+    assert metric("lamplighter_maintenance_last_success_timestamp_seconds", task="retention") > 0
+
+
+def test_failed_maintenance_keeps_last_success() -> None:
+    task = unique("task")
+    try:
+        with get_sessionmaker()() as s:
+            maintenance.record(s, task, ok=True)
+            first = s.get_one(MaintenanceStatus, task).last_success_at
+            maintenance.record(s, task, ok=False, error="pg_dump failed")
+            s.expire_all()
+            row = s.get_one(MaintenanceStatus, task)
+        assert row.last_status == "failed"
+        assert row.last_error == "pg_dump failed"
+        assert row.last_success_at == first
+        assert metric("lamplighter_maintenance_last_attempt_failed", task=task) == 1
+    finally:
+        with get_engine().begin() as conn:
+            conn.execute(text("DELETE FROM maintenance_status WHERE task = :t"), {"t": task})
 
 
 # --- reaper ----------------------------------------------------------------------------

@@ -1,0 +1,65 @@
+---
+- name: Log in to the registry
+  ansible.builtin.command:
+    cmd: docker login {{ lamplighter_registry }} --username {{ lamplighter_registry_username }} --password-stdin
+    stdin: "{{ lamplighter_registry_password }}"
+  changed_when: false
+  no_log: true
+  when: lamplighter_registry_password | length > 0
+
+- name: Pull images
+  community.docker.docker_compose_v2_pull:
+    project_src: "{{ lamplighter_dir }}"
+    policy: "{{ lamplighter_pull }}"
+  when: lamplighter_pull != 'never'
+
+- name: Start Postgres
+  community.docker.docker_compose_v2:
+    project_src: "{{ lamplighter_dir }}"
+    services: [postgres]
+    state: present
+    pull: never
+    wait: true
+    wait_timeout: 120
+
+# Before the new app containers start. Migrations must stay compatible with the previous
+# version, because old workers keep running until they have finished their run.
+- name: Run database migrations
+  ansible.builtin.command:
+    cmd: docker compose run --rm -T --no-deps migrate
+    chdir: "{{ lamplighter_dir }}"
+  register: lamplighter_migrate
+  changed_when: "'schema upgraded' in lamplighter_migrate.stdout"
+
+- name: Start api and scheduler
+  community.docker.docker_compose_v2:
+    project_src: "{{ lamplighter_dir }}"
+    services: [api, scheduler]
+    dependencies: false
+    state: present
+    pull: never
+    remove_orphans: true
+    wait: true
+    wait_timeout: 180
+
+# One at a time: the old container gets SIGTERM, claims nothing new and finishes its
+# current run (at most lamplighter_worker_stop_grace); the other worker keeps going.
+- name: Update the workers one at a time
+  community.docker.docker_compose_v2:
+    project_src: "{{ lamplighter_dir }}"
+    services: ["{{ item }}"]
+    dependencies: false
+    state: present
+    pull: never
+    wait: true
+    wait_timeout: 120
+  loop: [worker-a, worker-b]
+
+- name: Wait until the api is ready
+  ansible.builtin.uri:
+    url: "http://{{ lamplighter_api_bind }}/readyz"
+  register: lamplighter_ready
+  until: lamplighter_ready.status == 200
+  retries: 30
+  delay: 2
+  changed_when: false

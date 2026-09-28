@@ -39,8 +39,11 @@ migrations/        # Alembic
 tests/
   unit/
   integration/     # runs against compose.dev.yml
-docs/plan.md
-compose.yml        # production
+deploy/
+  roles/lamplighter/ # Ansible role: production compose (template), backup timer, rolling update
+  site.yml, restore.yml
+  tests/           # deploy-test (CI only: writes to /opt and systemd on the runner)
+docs/plan.md, docs/deploy/  # design; nginx example, backup and restore
 compose.dev.yml    # dev: postgres, ssh-target, keycloak, openbao, git-http, webhook-sink
 ```
 
@@ -71,13 +74,21 @@ scripts/it-secret-scan.sh         # on the host: no dev secrets in the container
 # migrations
 $DEV alembic revision --autogenerate -m "<description>"
 podman compose -f compose.dev.yml run --rm migrate
+
+# Ansible role: lint locally; the full deploy test only runs in CI (it needs Docker and
+# systemd on a throwaway host)
+$DEV sh -c 'pip install -q -r deploy/requirements.txt && cd deploy &&
+  ansible-galaxy collection install -r requirements.yml && ansible-lint'
 ```
 
 ## CI
 
-GitHub Actions (`.github/workflows/ci.yml`): lint, unit, integration (compose.dev.yml
-with Docker, including the slow tests, failover and secret scan) and the image to GHCR
-(`ghcr.io/<owner>/lamplighter`, only `main` and `v*` tags). Pin actions to a commit SHA.
+GitHub Actions (`.github/workflows/ci.yml`): lint, ansible-lint, unit, integration
+(compose.dev.yml with Docker, including the slow tests, failover and secret scan), the
+deploy test of the Ansible role, a Trivy scan of the runtime image (fails on fixable
+HIGH/CRITICAL; exceptions in `.trivyignore` with a reason) and the image to GHCR
+(`ghcr.io/<owner>/lamplighter`, only `main` and `v*` tags). Pin actions to a commit SHA and
+container images used in CI to a digest.
 
 ## Conventions
 
@@ -86,7 +97,8 @@ with Docker, including the slow tests, failover and secret scan) and the image t
   Never read `os.environ` directly.
 - Business logic in `app/services/`. Routers and the worker loop are thin.
 - Every schema change gets an Alembic migration. Never `metadata.create_all()` outside
-  tests.
+  tests. Migrations must stay compatible with the previous version: during an update old
+  workers keep running until their run is done.
 - Always store time timezone-aware in UTC. A schedule has its own time zone field.
 - Logging via stdlib `logging` in JSON format to stdout. No `print`.
 - All text in the repo is English: UI, code comments, docstrings, CLI and script output,

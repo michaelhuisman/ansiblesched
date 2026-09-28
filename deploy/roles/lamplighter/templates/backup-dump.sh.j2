@@ -1,0 +1,42 @@
+#!/bin/sh
+# {{ ansible_managed }}
+# Runs inside the backup container (Postgres image): pg_dump in custom format, prune old
+# dumps and record the outcome in maintenance_status (keep the columns in sync with
+# app/models/maintenance.py). Connection via PGHOST/PGUSER/PGDATABASE/PGPASSWORD.
+set -eu
+umask 077
+keep_days=${BACKUP_KEEP_DAYS:-14}
+file=/backups/lamplighter-$(date -u +%Y%m%dT%H%M%SZ).dump
+
+record() {  # record <ok|failed> <error> <details-json>
+    psql -X -q -v ON_ERROR_STOP=1 -v status="$1" -v err="$2" -v details="$3" <<'SQL'
+INSERT INTO maintenance_status
+    (task, last_attempt_at, last_status, last_success_at, last_error, details)
+VALUES ('backup', now(), :'status', CASE WHEN :'status' = 'ok' THEN now() END,
+        NULLIF(:'err', ''), CAST(:'details' AS jsonb))
+ON CONFLICT (task) DO UPDATE SET
+    last_attempt_at = excluded.last_attempt_at,
+    last_status = excluded.last_status,
+    last_success_at = coalesce(excluded.last_success_at, maintenance_status.last_success_at),
+    last_error = excluded.last_error,
+    details = excluded.details;
+SQL
+}
+
+fail() {
+    rm -f "$file.partial"
+    record failed "$1" '{}' || true
+    echo "backup failed: $1" >&2
+    exit 1
+}
+
+pg_dump -Fc -f "$file.partial" || fail "pg_dump failed"
+mv "$file.partial" "$file"
+bytes=$(stat -c %s "$file")
+if [ "$keep_days" -gt 0 ]; then
+    find /backups -maxdepth 1 -name 'lamplighter-*.dump' -mtime +"$keep_days" -delete
+fi
+kept=$(find /backups -maxdepth 1 -name 'lamplighter-*.dump' | wc -l)
+record ok '' "{\"file\": \"$(basename "$file")\", \"bytes\": $bytes, \"kept\": $kept}" \
+    || fail "could not record the backup status"
+echo "backup written: $(basename "$file") ($bytes bytes, $kept kept)"

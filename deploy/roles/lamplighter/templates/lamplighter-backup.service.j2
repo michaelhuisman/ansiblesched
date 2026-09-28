@@ -1,0 +1,9 @@
+# {{ ansible_managed }}
+[Unit]
+Description=lamplighter: Postgres backup
+Requires=docker.service
+After=docker.service
+
+[Service]
+Type=oneshot
+ExecStart={{ lamplighter_dir }}/bin/backup.sh

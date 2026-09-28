@@ -418,7 +418,7 @@ worker, Keycloak OIDC validation (JWT via JWKS) and RBAC on client roles `viewer
 
 ## Phase 5 — Hardening and production
 
-**Scope:** a production `compose.yml`, a CI pipeline (lint, test, build, push to a
+**Scope:** a production compose file, a CI pipeline (lint, test, build, push to a
 registry), an Ansible role `deploy/roles/lamplighter`, a retention job for `run_events`
 and old runs, a Postgres backup (`pg_dump`) and TLS via a reverse proxy.
 
@@ -448,6 +448,44 @@ pinned to a commit SHA:
   and the semver (on a tag).
 - The host scripts pick the runtime via `$CONTAINER` (Podman by default if available,
   otherwise Docker; see `scripts/lib.sh`).
+
+**Details 5b-2 (deploy)**
+- **Ansible role** `deploy/roles/lamplighter` (+ `deploy/site.yml`, `deploy/restore.yml`
+  and an example inventory). Requires Docker Engine with the compose plugin and systemd;
+  it does not install Docker. Everything lives in `/opt/lamplighter`: `compose.yml` (from
+  the role template; the old root `compose.yml` is gone), `secrets/*.env` (0600) and
+  `backups/`. Secrets come from ansible-vault; the database password reaches the app as
+  `PGPASSWORD`, so it is not in the database URL. Argument specs validate the variables.
+- **Order:** pull, Postgres, `migrate` (reports `changed` only when the schema changed:
+  "schema upgraded"), api and scheduler, then `worker-a` and `worker-b` one at a time,
+  and wait for `/readyz`. A second run gives `changed=0`.
+- **Update without interruption:** two worker services instead of one scaled service. A
+  worker that gets SIGTERM claims nothing new and finishes its run
+  (`stop_grace_period`, default 1h); the other worker keeps going. Migrations must
+  therefore stay compatible with the previous version.
+- **Network:** a fixed subnet for the compose network, so the proxy address is fixed:
+  `LAMPLIGHTER_TRUSTED_PROXIES` defaults to its gateway (172.30.117.1).
+- **Backup:** a systemd timer (`lamplighter-backup.timer`, daily, `Persistent=true`)
+  runs the one-shot compose service `backup` (Postgres image, profile `backup`):
+  `pg_dump -Fc`, pruning after `lamplighter_backup_keep_days`, and an optional host
+  command afterwards (`lamplighter_backup_post_command`, e.g. an offsite copy).
+- **Maintenance status:** the table `maintenance_status` (one row per task: last attempt,
+  status, last success, error) is written by the retention job and by the backup (psql).
+  Metrics: `lamplighter_maintenance_last_success_timestamp_seconds{task}` and
+  `lamplighter_maintenance_last_attempt_failed{task}`.
+- **Restore:** `restore.yml` makes a safety backup, stops the app, replaces the `public`
+  schema with the dump, runs the migrations and starts everything again. See
+  `docs/deploy/restore.md`.
+- **nginx:** an example in `docs/deploy/nginx.conf` (TLS, SSE without buffering,
+  `X-Forwarded-*`, a rate limit on the login, `/metrics` only from monitoring).
+- **CI:** `lint-deploy` (ansible-lint, profile `production`, and a syntax check);
+  `deploy` runs `deploy/tests/deploy-test.sh` on the runner: install, idempotence, an
+  image update during a running run, a backup via the systemd service and a restore. The
+  test fixtures (dev OpenBao, ssh-target, git-http) come from `compose.dev.yml` as
+  project `lamplighter-fixtures`. `scan`: Trivy (pinned by digest) on the runtime image;
+  fixable HIGH/CRITICAL findings fail the build (exceptions in `.trivyignore`), and all
+  findings go to the Security tab as SARIF on pushes.
+- **README:** a description of the app with the logo, and the installation steps.
 
 **Details 5a**
 - **Retention:** a daily internal job of the scheduler leader
@@ -525,8 +563,15 @@ Postgres external or via an operator.
   a phone.
 - **Remote processes on cancel/timeout:** ansible-runner stops the local ansible process;
   a running command on the target (e.g. `sleep`) keeps running there.
-- **AppRole secret ids** are now stored as an env file on the host. Better: response
-  wrapping or a short-lived secret id per deploy, handed out by the Ansible role
-  (phase 5).
+- **AppRole secret ids** are stored as an env file on the host (0600, root). Better:
+  response wrapping or a short-lived, CIDR-bound secret id per deploy, minted by the
+  Ansible role. That needs an OpenBao token with rights on the AppRoles during the
+  deploy, which is a separate security decision.
+- **The role does not install Docker** and does not manage nginx or certificates; both
+  are the host's responsibility.
+- **Local test of the role:** only ansible-lint and a syntax check run locally; the
+  full deploy test needs a throwaway Linux host with Docker and systemd (CI). A local VM
+  (Lima/UTM) would make it possible on a Mac.
+- **Old images** are not pruned by the role; `docker image prune` now and then.
 - **The dev OpenBao is in-memory:** if you restart only `openbao`, the secrets are gone
   until `openbao-init` runs again (`podman compose up -d`).

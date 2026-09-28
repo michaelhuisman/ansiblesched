@@ -1,0 +1,84 @@
+---
+# Restore a backup (overwrites the database):
+#   ansible-playbook restore.yml -i <inventory> -e lamplighter_restore_file=lamplighter-<ts>.dump
+# First makes a safety backup, stops the app (workers finish their current run), replaces
+# the database with the dump, runs the migrations and starts everything again.
+- name: Restore a lamplighter backup
+  hosts: lamplighter
+  become: true
+  vars:
+    lamplighter_restore_safety_backup: true
+    lamplighter_app_services: [api, scheduler, worker-a, worker-b]
+  tasks:
+    - name: Load role defaults
+      ansible.builtin.include_role:
+        name: lamplighter
+        tasks_from: noop
+        public: true
+
+    - name: Check the restore file name
+      ansible.builtin.assert:
+        that: lamplighter_restore_file is defined and lamplighter_restore_file is match('^lamplighter-[0-9TZ]+\.dump$')
+        fail_msg: Pass -e lamplighter_restore_file=lamplighter-<timestamp>.dump (a file in {{ lamplighter_dir }}/backups).
+        quiet: true
+
+    - name: Check that the dump exists
+      ansible.builtin.stat:
+        path: "{{ lamplighter_dir }}/backups/{{ lamplighter_restore_file }}"
+      register: lamplighter_dump
+      failed_when: not lamplighter_dump.stat.exists
+
+    - name: Make a safety backup of the current database
+      ansible.builtin.command: "{{ lamplighter_dir }}/bin/backup.sh"
+      changed_when: true
+      when: lamplighter_restore_safety_backup | bool
+
+    - name: Stop the app
+      community.docker.docker_compose_v2:
+        project_src: "{{ lamplighter_dir }}"
+        services: "{{ lamplighter_app_services }}"
+        dependencies: false
+        state: stopped
+
+    # A clean schema instead of pg_restore --clean: tables that are newer than the dump
+    # would otherwise stay and break the migrations afterwards.
+    - name: Empty the database
+      ansible.builtin.command:
+        cmd: >-
+          docker compose exec -T postgres psql -X -v ON_ERROR_STOP=1 -U lamplighter -d lamplighter
+          -c "DROP SCHEMA public CASCADE" -c "CREATE SCHEMA public"
+        chdir: "{{ lamplighter_dir }}"
+      changed_when: true
+
+    - name: Restore the dump
+      ansible.builtin.command:
+        cmd: >-
+          docker compose --profile backup run --rm -T --entrypoint pg_restore backup
+          --no-owner --single-transaction --exit-on-error
+          -d lamplighter /backups/{{ lamplighter_restore_file }}
+        chdir: "{{ lamplighter_dir }}"
+      changed_when: true
+
+    - name: Run database migrations
+      ansible.builtin.command:
+        cmd: docker compose run --rm -T --no-deps migrate
+        chdir: "{{ lamplighter_dir }}"
+      changed_when: true
+
+    - name: Start the app
+      community.docker.docker_compose_v2:
+        project_src: "{{ lamplighter_dir }}"
+        services: "{{ lamplighter_app_services }}"
+        dependencies: false
+        state: present
+        pull: never
+        wait: true
+        wait_timeout: 180
+
+    - name: Wait until the api is ready
+      ansible.builtin.uri:
+        url: "http://{{ lamplighter_api_bind }}/readyz"
+      register: lamplighter_ready
+      until: lamplighter_ready.status == 200
+      retries: 30
+      delay: 2

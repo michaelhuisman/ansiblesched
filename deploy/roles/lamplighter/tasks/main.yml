@@ -1,0 +1,12 @@
+---
+- name: Preflight checks
+  ansible.builtin.import_tasks: preflight.yml
+
+- name: Configuration files
+  ansible.builtin.import_tasks: config.yml
+
+- name: Deploy the stack
+  ansible.builtin.import_tasks: deploy.yml
+
+- name: Daily backup
+  ansible.builtin.import_tasks: backup.yml

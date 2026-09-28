@@ -1,0 +1,10 @@
+---
+# Copy to vault.yml, fill in and encrypt: ansible-vault encrypt vault.yml
+# Generate random values with e.g.: openssl rand -hex 32
+vault_lamplighter_postgres_password: CHANGE-ME
+vault_lamplighter_metrics_token: CHANGE-ME
+vault_lamplighter_oidc_client_secret: CHANGE-ME
+vault_lamplighter_worker_openbao_role_id: CHANGE-ME
+vault_lamplighter_worker_openbao_secret_id: CHANGE-ME
+vault_lamplighter_scheduler_openbao_role_id: CHANGE-ME
+vault_lamplighter_scheduler_openbao_secret_id: CHANGE-ME

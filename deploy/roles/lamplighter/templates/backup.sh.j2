@@ -1,0 +1,8 @@
+#!/bin/sh
+# {{ ansible_managed }}
+# Daily backup (lamplighter-backup.timer). Can also be run by hand.
+set -eu
+cd {{ lamplighter_dir }}
+docker compose --profile backup run --rm -T backup
+latest=$(ls -1t {{ lamplighter_dir }}/backups/lamplighter-*.dump | head -n 1)
+BACKUP_FILE=$latest {{ lamplighter_dir }}/bin/backup-post.sh

@@ -1,0 +1,2 @@
+# Accepted Trivy findings for the runtime image, one CVE id per line, each with a reason
+# and a review date. Empty on purpose: fix by updating the base image or a dependency.

@@ -1,0 +1,46 @@
+---
+- name: Create directories
+  ansible.builtin.file:
+    path: "{{ item.path }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "{{ item.mode }}"
+  loop:
+    - {path: "{{ lamplighter_dir }}", mode: "0755"}
+    - {path: "{{ lamplighter_dir }}/bin", mode: "0755"}
+    - {path: "{{ lamplighter_dir }}/secrets", mode: "0700"}
+    - {path: "{{ lamplighter_dir }}/backups", mode: "0700"}
+
+- name: Write secret env files
+  ansible.builtin.template:
+    src: "{{ item }}.env.j2"
+    dest: "{{ lamplighter_dir }}/secrets/{{ item }}.env"
+    owner: root
+    group: root
+    mode: "0600"
+  loop: [db, api, worker, scheduler]
+  no_log: true
+
+- name: Write compose.yml
+  ansible.builtin.template:
+    src: compose.yml.j2
+    dest: "{{ lamplighter_dir }}/compose.yml"
+    owner: root
+    group: root
+    mode: "0644"
+    validate: docker compose -f %s config --quiet --no-interpolate
+  # Validated in a temp dir: the template therefore uses absolute paths only, and the
+  # env files must exist first.
+
+- name: Write backup scripts
+  ansible.builtin.template:
+    src: "{{ item.src }}"
+    dest: "{{ lamplighter_dir }}/bin/{{ item.dest }}"
+    owner: root
+    group: root
+    mode: "0755"
+  loop:
+    - {src: backup-dump.sh.j2, dest: backup-dump.sh}
+    - {src: backup.sh.j2, dest: backup.sh}
+    - {src: backup-post.sh.j2, dest: backup-post.sh}

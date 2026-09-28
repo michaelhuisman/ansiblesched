@@ -1,0 +1,11 @@
+# {{ ansible_managed }}
+[Unit]
+Description=lamplighter: daily Postgres backup
+
+[Timer]
+OnCalendar=*-*-* {{ lamplighter_backup_time }}:00 UTC
+# Catch up after downtime.
+Persistent=true
+
+[Install]
+WantedBy=timers.target
