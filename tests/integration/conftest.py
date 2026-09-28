@@ -20,9 +20,9 @@ import pytest
 from app.core.db import get_sessionmaker
 from app.services import api_tokens, users
 
-API_URL = os.environ.get("SCHED_IT_API_URL", "http://127.0.0.1:8000")
+API_URL = os.environ.get("LAMPLIGHTER_IT_API_URL", "http://127.0.0.1:8000")
 FIXTURE_REPO = Path("/fixtures/repo.git")
-RUNTIME_DIR = Path("/run/scheduler")
+RUNTIME_DIR = Path("/run/lamplighter")
 SECRETS_DIR = Path("/secrets")
 TERMINAL = {"successful", "failed", "error", "timeout", "canceled", "skipped"}
 INLINE_INVENTORY = "ssh-target ansible_user=ansible ansible_python_interpreter=/usr/bin/python3\n"

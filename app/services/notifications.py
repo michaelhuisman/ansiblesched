@@ -24,7 +24,7 @@ BASE_BACKOFF_S = 5
 MAX_BACKOFF_S = 600
 BATCH = 20
 TIMEOUT_S = 10.0
-SIGNATURE_HEADER = "X-Scheduler-Signature"
+SIGNATURE_HEADER = "X-Lamplighter-Signature"
 
 
 def fingerprint(url: str) -> str:
@@ -180,9 +180,9 @@ def _send(
     body = json.dumps(build_payload(run, template, note.event, public_url)).encode()
     headers = {
         "Content-Type": "application/json",
-        "User-Agent": "ansible-scheduler",
-        "X-Scheduler-Event": note.event,
-        "X-Scheduler-Delivery": str(note.id),
+        "User-Agent": "lamplighter",
+        "X-Lamplighter-Event": note.event,
+        "X-Lamplighter-Delivery": str(note.id),
     }
     if secret:
         headers[SIGNATURE_HEADER] = sign(body, secret)

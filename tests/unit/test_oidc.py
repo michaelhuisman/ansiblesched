@@ -11,7 +11,7 @@ from app.core.oidc import OidcClient, OidcError, PkcePair
 from app.ui.auth_routes import safe_next
 
 ISSUER = "http://idp.example/realms/test"
-CLIENT = "ansible-scheduler"
+CLIENT = "lamplighter"
 
 KEY = rsa.generate_private_key(public_exponent=65537, key_size=2048)
 OTHER_KEY = rsa.generate_private_key(public_exponent=65537, key_size=2048)

@@ -61,14 +61,14 @@ class RunMetricsCollector(Collector):
             last_success = session.execute(_LAST_SUCCESS).all()
 
         runs = CounterMetricFamily(
-            "sched_runs", "Runs per template and status", labels=["template", "status"]
+            "lamplighter_runs", "Runs per template and status", labels=["template", "status"]
         )
         for row in by_status:
             runs.add_metric([row.template, row.status], row.n)
         yield runs
 
         hist = HistogramMetricFamily(
-            "sched_run_duration_seconds",
+            "lamplighter_run_duration_seconds",
             "Duration of finished runs",
             labels=["template"],
         )
@@ -78,16 +78,16 @@ class RunMetricsCollector(Collector):
             hist.add_metric([row.template], buckets, sum_value=float(row.total))
         yield hist
 
-        depth = GaugeMetricFamily("sched_queue_depth", "Runs waiting in the queue")
+        depth = GaugeMetricFamily("lamplighter_queue_depth", "Runs waiting in the queue")
         depth.add_metric([], queue.queued)
         yield depth
 
-        running = GaugeMetricFamily("sched_runs_running", "Runs currently running")
+        running = GaugeMetricFamily("lamplighter_runs_running", "Runs currently running")
         running.add_metric([], queue.running)
         yield running
 
         last = GaugeMetricFamily(
-            "sched_schedule_last_success_timestamp_seconds",
+            "lamplighter_schedule_last_success_timestamp_seconds",
             "Finish time of the last successful run per schedule",
             labels=["schedule_id", "template"],
         )

@@ -3,9 +3,9 @@
 #   .dev/secrets/ssh-target/id_ed25519   SSH-key voor de ssh-target container
 #   .dev/secrets/vault/password          vault-wachtwoord voor tests
 #   .dev/secrets/keycloak/*              client-secret, admin- en testwachtwoorden
-#   .dev/secrets/oidc.env                SCHED_OIDC_CLIENT_SECRET voor de api
+#   .dev/secrets/oidc.env                LAMPLIGHTER_OIDC_CLIENT_SECRET voor de api
 #   .dev/secrets/keycloak.env            bootstrap-admin voor de Keycloak-console
-#   .dev/keycloak/realm-scheduler.json   realm-import, gerenderd uit dev/keycloak/*.tpl
+#   .dev/keycloak/realm-lamplighter.json   realm-import, gerenderd uit dev/keycloak/*.tpl
 #   .dev/secrets/openbao/*               root-token (alleen init + tests), AppRole-id's
 #   .dev/secrets/git/token               token voor de git-http-server
 #   .dev/secrets/webhook/hmac            HMAC-secret voor webhooks
@@ -22,7 +22,7 @@ secret() {  # secret <bestand>: aanmaken als hij nog niet bestaat, dan uitlezen
 }
 
 if [ ! -f "$dir/ssh-target/id_ed25519" ]; then
-    ssh-keygen -q -t ed25519 -N "" -C "ansible-scheduler-dev" -f "$dir/ssh-target/id_ed25519"
+    ssh-keygen -q -t ed25519 -N "" -C "lamplighter-dev" -f "$dir/ssh-target/id_ed25519"
 fi
 secret "$dir/vault/password" >/dev/null
 
@@ -36,8 +36,8 @@ pw_norole=$(secret "$dir/keycloak/kc-norole")
 sed -e "s/__CLIENT_SECRET__/$client_secret/" \
     -e "s/__PW_VIEWER__/$pw_viewer/" -e "s/__PW_OPERATOR__/$pw_operator/" \
     -e "s/__PW_ADMIN__/$pw_admin/" -e "s/__PW_NOROLE__/$pw_norole/" \
-    dev/keycloak/realm-scheduler.json.tpl >.dev/keycloak/realm-scheduler.json
-printf 'SCHED_OIDC_CLIENT_SECRET=%s\n' "$client_secret" >"$dir/oidc.env"
+    dev/keycloak/realm-lamplighter.json.tpl >.dev/keycloak/realm-lamplighter.json
+printf 'LAMPLIGHTER_OIDC_CLIENT_SECRET=%s\n' "$client_secret" >"$dir/oidc.env"
 printf 'KC_BOOTSTRAP_ADMIN_USERNAME=admin\nKC_BOOTSTRAP_ADMIN_PASSWORD=%s\n' "$kc_admin" >"$dir/keycloak.env"
 
 secret "$dir/git/token" >/dev/null
@@ -50,9 +50,9 @@ sched_secret=$(secret "$dir/openbao/scheduler-secret-id")
 printf 'BAO_DEV_ROOT_TOKEN_ID=%s\n' "$root_token" >"$dir/openbao/server.env"
 printf 'BAO_TOKEN=%s\nWORKER_ROLE_ID=%s\nWORKER_SECRET_ID=%s\nSCHEDULER_ROLE_ID=%s\nSCHEDULER_SECRET_ID=%s\n' \
     "$root_token" "$worker_role" "$worker_secret" "$sched_role" "$sched_secret" >"$dir/openbao/init.env"
-printf 'SCHED_OPENBAO_ROLE_ID=%s\nSCHED_OPENBAO_SECRET_ID=%s\n' "$worker_role" "$worker_secret" \
+printf 'LAMPLIGHTER_OPENBAO_ROLE_ID=%s\nLAMPLIGHTER_OPENBAO_SECRET_ID=%s\n' "$worker_role" "$worker_secret" \
     >"$dir/openbao/worker.env"
-printf 'SCHED_OPENBAO_ROLE_ID=%s\nSCHED_OPENBAO_SECRET_ID=%s\n' "$sched_role" "$sched_secret" \
+printf 'LAMPLIGHTER_OPENBAO_ROLE_ID=%s\nLAMPLIGHTER_OPENBAO_SECRET_ID=%s\n' "$sched_role" "$sched_secret" \
     >"$dir/openbao/scheduler.env"
 
 # De containers draaien onder andere uid's; dit zijn uitsluitend dev-secrets.

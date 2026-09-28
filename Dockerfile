@@ -18,8 +18,8 @@ RUN apt-get update \
 
 RUN groupadd --gid 10001 app \
     && useradd --uid 10001 --gid app --home-dir /home/app --create-home app \
-    && install -d -o app -g app -m 0700 /run/scheduler \
-    && install -d -o app -g app /var/cache/scheduler/repos /fixtures
+    && install -d -o app -g app -m 0700 /run/lamplighter \
+    && install -d -o app -g app /var/cache/lamplighter/repos /fixtures
 
 WORKDIR /app
 COPY requirements.txt .

@@ -8,12 +8,12 @@ until bao status >/dev/null 2>&1; do sleep 1; done
 
 bao auth list -format=json | grep -q '"approle/"' || bao auth enable approle >/dev/null
 
-bao policy write sched-worker - >/dev/null <<'POLICY'
+bao policy write lamplighter-worker - >/dev/null <<'POLICY'
 path "secret/data/ssh/*"   { capabilities = ["read"] }
 path "secret/data/vault/*" { capabilities = ["read"] }
 path "secret/data/git/*"   { capabilities = ["read"] }
 POLICY
-bao policy write sched-scheduler - >/dev/null <<'POLICY'
+bao policy write lamplighter-scheduler - >/dev/null <<'POLICY'
 path "secret/data/webhooks/*" { capabilities = ["read"] }
 POLICY
 
@@ -24,8 +24,8 @@ role() {
     bao write "auth/approle/role/$1/role-id" role_id="$2" >/dev/null
     bao write "auth/approle/role/$1/custom-secret-id" secret_id="$3" >/dev/null 2>&1 || true
 }
-role sched-worker "$WORKER_ROLE_ID" "$WORKER_SECRET_ID"
-role sched-scheduler "$SCHEDULER_ROLE_ID" "$SCHEDULER_SECRET_ID"
+role lamplighter-worker "$WORKER_ROLE_ID" "$WORKER_SECRET_ID"
+role lamplighter-scheduler "$SCHEDULER_ROLE_ID" "$SCHEDULER_SECRET_ID"
 
 bao kv put -mount=secret ssh/ssh-target id_ed25519=@/secrets/ssh-target/id_ed25519 >/dev/null
 bao kv put -mount=secret vault/dev password=@/secrets/vault/password >/dev/null

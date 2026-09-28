@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}{{ 'Edit user' if editing else 'Add local user' }} · ansible-scheduler{% endblock %}
+{% block title %}{{ 'Edit user' if editing else 'Add local user' }} · lamplighter{% endblock %}
 {% block content %}
 <div class="page-head">
   <h1>{% if editing %}Edit user <span class="muted">· {{ item.display_name or item.username }}</span>{% else %}Add local user{% endif %}</h1>

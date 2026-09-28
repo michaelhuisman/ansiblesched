@@ -25,8 +25,8 @@ from tests.integration.conftest import (
     unique,
 )
 
-KEYCLOAK = os.environ.get("SCHED_IT_KEYCLOAK", "http://127.0.0.1:8080")
-KC_TOKEN_URL = f"{KEYCLOAK}/realms/scheduler/protocol/openid-connect/token"
+KEYCLOAK = os.environ.get("LAMPLIGHTER_IT_KEYCLOAK", "http://127.0.0.1:8080")
+KC_TOKEN_URL = f"{KEYCLOAK}/realms/lamplighter/protocol/openid-connect/token"
 
 
 def kc_password(user: str) -> str:
@@ -38,7 +38,7 @@ def kc_token(user: str) -> str:
         KC_TOKEN_URL,
         data={
             "grant_type": "password",
-            "client_id": "scheduler-tests",
+            "client_id": "lamplighter-tests",
             "username": user,
             "password": kc_password(user),
         },
@@ -141,7 +141,7 @@ def test_anonymous_gets_401(finished_run: dict[str, Any]) -> None:
 
 @pytest.mark.parametrize(
     "token",
-    ["abc.def.ghi", "not-a-jwt", "sched_doesnotexist", "eyJhbGciOiJub25lIn0.e30."],
+    ["abc.def.ghi", "not-a-jwt", "lamplighter_doesnotexist", "eyJhbGciOiJub25lIn0.e30."],
 )
 def test_invalid_tokens_get_401(token: str) -> None:
     resp = httpx.get(f"{API_URL}/api/v1/runs", headers=bearer(token))
@@ -209,7 +209,7 @@ def test_api_token_lifecycle(env: Env) -> None:
     created = c.post("/tokens", json={"name": "script", "expires_days": 7})
     assert created.status_code == 201
     raw = created.json()["token"]
-    assert raw.startswith("sched_")
+    assert raw.startswith("lamplighter_")
     listed = c.get("/tokens").json()
     assert any(t["id"] == created.json()["id"] for t in listed)
     assert all("token" not in t for t in listed)  # alleen bij aanmaken
@@ -288,7 +288,7 @@ def test_ui_requires_login() -> None:
 def test_ui_login_and_logout(local_users: dict[str, LocalUser]) -> None:
     user = local_users["viewer"]
     ui = login_ui(user.username, user.password)
-    cookie = ui.cookies.get("sched_session")
+    cookie = ui.cookies.get("lamplighter_session")
     assert cookie
     page = ui.get("/runs")
     assert page.status_code == 200
@@ -298,7 +298,7 @@ def test_ui_login_and_logout(local_users: dict[str, LocalUser]) -> None:
 
     assert ui.post("/logout").status_code == 303
     again = httpx.get(
-        f"{API_URL}/ui/runs", cookies={"sched_session": cookie}, follow_redirects=False
+        f"{API_URL}/ui/runs", cookies={"lamplighter_session": cookie}, follow_redirects=False
     )
     assert again.status_code == 303
 
@@ -364,7 +364,7 @@ def test_ui_api_token_shown_once(admin: LocalUser) -> None:
     ui = login_ui(admin.username, admin.password)
     resp = ui.post("/account/tokens", data={"name": "from-ui", "expires_days": "7"})
     assert resp.status_code == 200
-    match = re.search(r"(sched_[A-Za-z0-9_-]{20,})", resp.text)
+    match = re.search(r"(lamplighter_[A-Za-z0-9_-]{20,})", resp.text)
     assert match
     assert httpx.get(f"{API_URL}/api/v1/me", headers=bearer(match.group(1))).status_code == 200
     assert match.group(1) not in ui.get("/account").text
@@ -521,4 +521,4 @@ def test_oidc_callback_rejects_bad_state() -> None:
     c.get(f"{API_URL}/ui/auth/oidc/start")
     resp = c.get(f"{API_URL}/ui/auth/callback", params={"code": "x", "state": "forged"})
     assert resp.status_code == 401
-    assert "sched_session" not in c.cookies
+    assert "lamplighter_session" not in c.cookies

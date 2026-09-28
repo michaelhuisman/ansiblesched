@@ -31,7 +31,7 @@ log = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/ui", include_in_schema=False)
 
-OIDC_COOKIE = "sched_oidc"
+OIDC_COOKIE = "lamplighter_oidc"
 OIDC_COOKIE_MAX_AGE = 600
 DEFAULT_NEXT = "/ui/runs"
 
@@ -236,7 +236,7 @@ def oidc_callback(
             None,
             code=403,
             next=DEFAULT_NEXT,
-            error="Your account has no access to ansible-scheduler (no role assigned).",
+            error="Your account has no access to lamplighter (no role assigned).",
         )
     audit.record(session, who, "login", "user", user.id, {"method": "oidc", "roles": roles})
     session.commit()

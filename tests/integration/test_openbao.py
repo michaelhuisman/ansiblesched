@@ -17,10 +17,10 @@ from sqlalchemy import text
 from app.core.db import get_engine
 from tests.integration.conftest import SECRETS_DIR, Env, fixture_head, post, unique
 
-OPENBAO = os.environ.get("SCHED_IT_OPENBAO", "http://127.0.0.1:8200")
-GIT_HTTP = os.environ.get("SCHED_IT_GIT_HTTP", "http://127.0.0.1:8081")
-SINK = os.environ.get("SCHED_IT_WEBHOOK_SINK", "http://127.0.0.1:8080")
-REPO_CACHE = Path("/var/cache/scheduler/repos")
+OPENBAO = os.environ.get("LAMPLIGHTER_IT_OPENBAO", "http://127.0.0.1:8200")
+GIT_HTTP = os.environ.get("LAMPLIGHTER_IT_GIT_HTTP", "http://127.0.0.1:8081")
+SINK = os.environ.get("LAMPLIGHTER_IT_WEBHOOK_SINK", "http://127.0.0.1:8080")
+REPO_CACHE = Path("/var/cache/lamplighter/repos")
 WEBHOOK_PATH = "webhooks/default"
 
 
@@ -43,7 +43,7 @@ def approle(name: str) -> hvac.Client:
     )
     client = hvac.Client(url=OPENBAO)
     client.auth.approle.login(
-        role_id=env["SCHED_OPENBAO_ROLE_ID"], secret_id=env["SCHED_OPENBAO_SECRET_ID"]
+        role_id=env["LAMPLIGHTER_OPENBAO_ROLE_ID"], secret_id=env["LAMPLIGHTER_OPENBAO_SECRET_ID"]
     )
     return client
 

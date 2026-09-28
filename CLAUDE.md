@@ -1,8 +1,9 @@
-# CLAUDE.md — ansible-scheduler
+# CLAUDE.md — lamplighter
 
 Applicatie die Ansible-playbooks op schema en on-demand uitvoert. Eén codebase en één
 image met drie rollen: `api`, `scheduler` en `worker` (plus een one-shot `migrate`).
-Het volledige ontwerp en de fasering staan in `docs/plan.md`. Lees dat bestand vóór je
+Namen: compose-project en image `lamplighter`, env prefix `LAMPLIGHTER_`, paden
+`/run/lamplighter` en `/var/cache/lamplighter`. Het volledige ontwerp en de fasering staan in `docs/plan.md`. Lees dat bestand vóór je
 aan een fase begint.
 
 ## Stack (vastgepind, niet afwijken zonder overleg)
@@ -19,7 +20,7 @@ aan een fase begint.
 - PyJWT (OIDC/JWKS), argon2-cffi (wachtwoorden lokale gebruikers)
 - hvac voor OpenBao (vanaf fase 4)
 - pytest, ruff (lint + format), mypy (strict op `app/`)
-- Postgres 16
+- Postgres 18
 - Docker Compose voor dev en productie
 
 ## Structuur
@@ -74,7 +75,7 @@ podman compose -f compose.dev.yml run --rm migrate
 ## Conventies
 
 - Volledige type hints. Geen `Any` zonder reden.
-- Config uitsluitend via `app/core/config.py` (pydantic-settings, env prefix `SCHED_`).
+- Config uitsluitend via `app/core/config.py` (pydantic-settings, env prefix `LAMPLIGHTER_`).
   Nergens `os.environ` direct lezen.
 - Businesslogica in `app/services/`. Routers en de worker-loop zijn dun.
 - Elke schemawijziging krijgt een Alembic-migratie. Nooit `metadata.create_all()`
@@ -84,7 +85,7 @@ podman compose -f compose.dev.yml run --rm migrate
 - UI-teksten zijn Engels; code-commentaar en docs zijn Nederlands.
 - De worker voert ansible-runner uit zonder process isolation
   (`process_isolation=False`). Ansible draait direct in de worker-container.
-- De private data dir van ansible-runner staat onder `SCHED_RUNTIME_DIR` (tmpfs) en
+- De private data dir van ansible-runner staat onder `LAMPLIGHTER_RUNTIME_DIR` (tmpfs) en
   wordt na elke run verwijderd, ook bij een exception.
 - Queue-claims gaan via `SELECT ... FOR UPDATE SKIP LOCKED`. Overlap per template en
   leader election gaan via Postgres advisory locks. Geen extra infra (Redis e.d.).

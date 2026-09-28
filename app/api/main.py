@@ -63,7 +63,7 @@ async def _permission_denied(request: Request, exc: Exception) -> Response:
 
 
 def create_app() -> FastAPI:
-    app = FastAPI(title="ansible-scheduler", version="0.1.0")
+    app = FastAPI(title="lamplighter", version="0.1.0")
     app.add_exception_handler(ServiceError, _service_error)
     app.add_exception_handler(NotAuthenticatedError, _not_authenticated)
     app.add_exception_handler(PermissionDeniedError, _permission_denied)

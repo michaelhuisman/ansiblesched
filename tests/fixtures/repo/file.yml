@@ -4,6 +4,6 @@
   tasks:
     - name: Write marker file
       ansible.builtin.copy:
-        dest: /tmp/ansible-scheduler-marker.txt
-        content: "{{ marker | default('hello from ansible-scheduler') }}\n"
+        dest: /tmp/lamplighter-marker.txt
+        content: "{{ marker | default('hello from lamplighter') }}\n"
         mode: "0644"

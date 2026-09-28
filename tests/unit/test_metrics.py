@@ -54,22 +54,22 @@ def _registry_output() -> str:
 
 def test_metrics_output() -> None:
     out = _registry_output()
-    assert 'sched_runs_total{status="successful",template="backup"} 5.0' in out
-    assert 'sched_runs_total{status="failed",template="backup"} 2.0' in out
-    assert "sched_queue_depth 4.0" in out
-    assert "sched_runs_running 1.0" in out
+    assert 'lamplighter_runs_total{status="successful",template="backup"} 5.0' in out
+    assert 'lamplighter_runs_total{status="failed",template="backup"} 2.0' in out
+    assert "lamplighter_queue_depth 4.0" in out
+    assert "lamplighter_runs_running 1.0" in out
     assert (
-        'sched_schedule_last_success_timestamp_seconds{schedule_id="7",template="backup"} 1.79e+09'
-        in out
+        "lamplighter_schedule_last_success_timestamp_seconds"
+        '{schedule_id="7",template="backup"} 1.79e+09' in out
     )
 
 
 def test_duration_histogram_is_cumulative() -> None:
     out = _registry_output()
-    assert 'sched_run_duration_seconds_bucket{le="1.0",template="backup"} 0.0' in out
-    assert 'sched_run_duration_seconds_bucket{le="5.0",template="backup"} 1.0' in out
-    assert 'sched_run_duration_seconds_bucket{le="60.0",template="backup"} 2.0' in out
-    assert 'sched_run_duration_seconds_bucket{le="600.0",template="backup"} 3.0' in out
-    assert 'sched_run_duration_seconds_bucket{le="+Inf",template="backup"} 3.0' in out
-    assert 'sched_run_duration_seconds_count{template="backup"} 3.0' in out
-    assert 'sched_run_duration_seconds_sum{template="backup"} 448.0' in out
+    assert 'lamplighter_run_duration_seconds_bucket{le="1.0",template="backup"} 0.0' in out
+    assert 'lamplighter_run_duration_seconds_bucket{le="5.0",template="backup"} 1.0' in out
+    assert 'lamplighter_run_duration_seconds_bucket{le="60.0",template="backup"} 2.0' in out
+    assert 'lamplighter_run_duration_seconds_bucket{le="600.0",template="backup"} 3.0' in out
+    assert 'lamplighter_run_duration_seconds_bucket{le="+Inf",template="backup"} 3.0' in out
+    assert 'lamplighter_run_duration_seconds_count{template="backup"} 3.0' in out
+    assert 'lamplighter_run_duration_seconds_sum{template="backup"} 448.0' in out

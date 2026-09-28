@@ -1,11 +1,11 @@
 {
-  "realm": "scheduler",
+  "realm": "lamplighter",
   "enabled": true,
   "sslRequired": "none",
   "accessTokenLifespan": 300,
   "roles": {
     "client": {
-      "ansible-scheduler": [
+      "lamplighter": [
         {"name": "viewer", "description": "Alleen lezen"},
         {"name": "operator", "description": "Lezen, launchen en annuleren"},
         {"name": "admin", "description": "Alles, inclusief configuratie en gebruikers"}
@@ -14,8 +14,8 @@
   },
   "clients": [
     {
-      "clientId": "ansible-scheduler",
-      "name": "ansible-scheduler",
+      "clientId": "lamplighter",
+      "name": "lamplighter",
       "protocol": "openid-connect",
       "publicClient": false,
       "secret": "__CLIENT_SECRET__",
@@ -29,11 +29,11 @@
       },
       "protocolMappers": [
         {
-          "name": "audience ansible-scheduler",
+          "name": "audience lamplighter",
           "protocol": "openid-connect",
           "protocolMapper": "oidc-audience-mapper",
           "config": {
-            "included.client.audience": "ansible-scheduler",
+            "included.client.audience": "lamplighter",
             "access.token.claim": "true",
             "id.token.claim": "false"
           }
@@ -41,7 +41,7 @@
       ]
     },
     {
-      "clientId": "scheduler-tests",
+      "clientId": "lamplighter-tests",
       "name": "Alleen voor integratietests (password grant)",
       "protocol": "openid-connect",
       "publicClient": true,
@@ -50,11 +50,11 @@
       "fullScopeAllowed": true,
       "protocolMappers": [
         {
-          "name": "audience ansible-scheduler",
+          "name": "audience lamplighter",
           "protocol": "openid-connect",
           "protocolMapper": "oidc-audience-mapper",
           "config": {
-            "included.client.audience": "ansible-scheduler",
+            "included.client.audience": "lamplighter",
             "access.token.claim": "true",
             "id.token.claim": "false"
           }
@@ -67,19 +67,19 @@
       "username": "kc-viewer", "enabled": true, "emailVerified": true,
       "email": "kc-viewer@example.invalid", "firstName": "Vera", "lastName": "Viewer",
       "credentials": [{"type": "password", "value": "__PW_VIEWER__", "temporary": false}],
-      "clientRoles": {"ansible-scheduler": ["viewer"]}
+      "clientRoles": {"lamplighter": ["viewer"]}
     },
     {
       "username": "kc-operator", "enabled": true, "emailVerified": true,
       "email": "kc-operator@example.invalid", "firstName": "Otto", "lastName": "Operator",
       "credentials": [{"type": "password", "value": "__PW_OPERATOR__", "temporary": false}],
-      "clientRoles": {"ansible-scheduler": ["operator"]}
+      "clientRoles": {"lamplighter": ["operator"]}
     },
     {
       "username": "kc-admin", "enabled": true, "emailVerified": true,
       "email": "kc-admin@example.invalid", "firstName": "Ada", "lastName": "Admin",
       "credentials": [{"type": "password", "value": "__PW_ADMIN__", "temporary": false}],
-      "clientRoles": {"ansible-scheduler": ["admin"]}
+      "clientRoles": {"lamplighter": ["admin"]}
     },
     {
       "username": "kc-norole", "enabled": true, "emailVerified": true,

@@ -3,14 +3,14 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>{% block title %}ansible-scheduler{% endblock %}</title>
+  <title>{% block title %}lamplighter{% endblock %}</title>
   <link rel="stylesheet" href="/ui/static/app.css">
   <script src="/ui/static/htmx.min.js" defer></script>
 </head>
 {# htmx sends the CSRF token with every non-GET request. #}
 <body {% if user and user.csrf_token %}hx-headers='{"X-CSRF-Token": "{{ user.csrf_token }}"}'{% endif %}>
   <header class="topbar">
-    <a class="brand" href="/ui/runs">ansible-scheduler</a>
+    <a class="brand" href="/ui/runs">lamplighter</a>
     {% if user %}
     <nav>
       {% set section = request.url.path.split('/')[2] if request.url.path.count('/') > 1 else '' %}
