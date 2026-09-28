@@ -95,7 +95,7 @@ def test_setup_error_cleans_up(env: Env) -> None:
         {
             "name": unique("missing"),
             "type": "ssh_key",
-            "openbao_path": "does-not-exist",
+            "openbao_path": "ssh/does-not-exist",
             "openbao_key": "id_ed25519",
         },
     )

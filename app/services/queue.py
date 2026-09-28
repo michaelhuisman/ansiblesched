@@ -11,6 +11,8 @@ from app.core.locks import NS_TEMPLATE
 from app.models import Notification, Run, RunEvent, RunStatus
 
 CLAIM_BATCH = 20
+# Outbox-rij die de scheduler nog moet uitsplitsen naar de huidige webhook-doelen.
+ALL_TARGETS = "*"
 NOTIFY_STATUSES = frozenset({RunStatus.FAILED, RunStatus.ERROR, RunStatus.TIMEOUT})
 
 
@@ -100,10 +102,10 @@ def finish(
     rc: int | None = None,
     stats: dict[str, Any] | None = None,  # ansible-runner stats: JSON
     reason: str | None = None,
-    notify_targets: Sequence[str] = (),
 ) -> None:
-    """Rond de run af. Bij een fout-status worden in dezelfde transactie notificaties
-    in de outbox gezet, zodat ze ook na een crash nog verstuurd worden."""
+    """Rond de run af. Bij een fout-status komt in dezelfde transactie een notificatie
+    in de outbox, zodat die ook na een crash nog verstuurd wordt. De worker kent de
+    webhook-doelen niet: de scheduler splitst de `*`-rij uit (zie notifications)."""
     with session.begin():
         finished = session.scalar(
             update(Run)
@@ -117,10 +119,11 @@ def finish(
             )
             .returning(Run.id)
         )
-        if finished is not None and status in NOTIFY_STATUSES and notify_targets:
+        if finished is not None and status in NOTIFY_STATUSES:
             session.execute(
-                insert(Notification),
-                [{"run_id": run_id, "target": t, "event": f"run.{status}"} for t in notify_targets],
+                insert(Notification).values(
+                    run_id=run_id, target=ALL_TARGETS, event=f"run.{status}"
+                )
             )
 
 

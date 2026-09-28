@@ -5,7 +5,14 @@ from pydantic import ValidationError
 
 from app.api.schemas import InventoryIn, TemplateIn
 from app.core.config import Settings
-from app.worker.credentials import CredentialError, CredentialRef, DevFileResolver
+from app.worker.credentials import (
+    CredentialError,
+    CredentialRef,
+    GitAuth,
+    UnconfiguredResolver,
+    resolve,
+    resolve_git,
+)
 
 
 def test_settings_from_env(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -17,7 +24,8 @@ def test_settings_from_env(monkeypatch: pytest.MonkeyPatch) -> None:
     assert s.poll_interval_s == 0.5
     assert s.worker_id == "w1"
     assert s.runtime_dir == Path("/run/scheduler")
-    assert s.dev_secrets_dir is None
+    assert s.openbao_enabled is False
+    assert s.webhook_openbao_path is None
 
 
 def test_settings_require_database_url(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -61,21 +69,28 @@ def test_inventory_source_validation() -> None:
         InventoryIn(name="i", source_type="inline", content="h", path="x")
 
 
-def test_dev_resolver_reads_secret(tmp_path: Path) -> None:
-    (tmp_path / "a").mkdir()
-    (tmp_path / "a" / "k").write_text("value")
-    assert DevFileResolver(tmp_path).resolve(CredentialRef(1, "ssh_key", "a", "k")) == "value"
+class DictResolver:
+    def __init__(self, values: dict[str, str]) -> None:
+        self.values = values
+
+    def fields(self, ref: CredentialRef) -> dict[str, str]:
+        return self.values
 
 
-def test_dev_resolver_blocks_escape(tmp_path: Path) -> None:
-    base = tmp_path / "secrets"
-    base.mkdir()
-    (tmp_path / "outside").write_text("nope")
-    with pytest.raises(CredentialError, match="outside"):
-        DevFileResolver(base).resolve(CredentialRef(1, "ssh_key", "..", "outside"))
+def test_resolve_picks_key() -> None:
+    ref = CredentialRef(1, "ssh_key", "ssh/a", "id_ed25519")
+    assert resolve(DictResolver({"id_ed25519": "KEY"}), ref) == "KEY"
+    with pytest.raises(CredentialError, match="id_ed25519"):
+        resolve(DictResolver({"other": "x"}), ref)
 
 
-def test_dev_resolver_missing_secret_hides_path(tmp_path: Path) -> None:
-    with pytest.raises(CredentialError) as exc:
-        DevFileResolver(tmp_path).resolve(CredentialRef(3, "ssh_key", "x", "y"))
-    assert str(tmp_path) not in str(exc.value)
+def test_resolve_git_username_default() -> None:
+    ref = CredentialRef(2, "git_token", "git/a", "token")
+    assert resolve_git(DictResolver({"token": "t"}), ref) == GitAuth("x-access-token", "t")
+    assert resolve_git(DictResolver({"token": "t", "username": "bot"}), ref).username == "bot"
+    assert "t'" not in repr(resolve_git(DictResolver({"token": "t"}), ref))
+
+
+def test_unconfigured_resolver() -> None:
+    with pytest.raises(CredentialError, match="no credential backend"):
+        UnconfiguredResolver().fields(CredentialRef(3, "ssh_key", "x", "y"))

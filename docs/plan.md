@@ -221,13 +221,12 @@ GET   /ui/...                           server-rendered UI (Jinja2 + htmx)
 | `SCHED_LOG_LEVEL`       | `INFO`                         |
 | `SCHED_API_HOST`        | `0.0.0.0`                      |
 | `SCHED_API_PORT`        | `8000`                         |
-| `SCHED_DEV_SECRETS_DIR` | — (fase 1, vervalt in fase 4)  |
 | `SCHED_ANSIBLE_HOST_KEY_CHECKING` | `true`               |
 | `SCHED_SCHEDULER_LOCK_RETRY_S` | `10`                    |
 | `SCHED_SCHEDULER_SYNC_INTERVAL_S` | `5`                  |
 | `SCHED_PUBLIC_URL`      | `http://localhost:8000`        |
-| `SCHED_WEBHOOK_URLS`    | `[]` (JSON-lijst; fase 4 → OpenBao) |
-| `SCHED_WEBHOOK_SECRET`  | — (HMAC-SHA256-signatuur)      |
+| `SCHED_WEBHOOK_OPENBAO_PATH` | — (leeg = geen webhooks) |
+| `SCHED_WEBHOOK_CACHE_S` | `60`                           |
 | `SCHED_AUTH_LOCAL_ENABLED` | `true`                      |
 | `SCHED_SESSION_COOKIE_SECURE` | `true` (dev: `false`)    |
 | `SCHED_SESSION_IDLE_S`  | `28800` (8 uur)                |
@@ -237,9 +236,11 @@ GET   /ui/...                           server-rendered UI (Jinja2 + htmx)
 | `SCHED_OIDC_DISCOVERY_URL` | — (default: van issuer)     |
 | `SCHED_OIDC_CLIENT_ID`  | `ansible-scheduler`            |
 | `SCHED_OIDC_CLIENT_SECRET` | —                           |
-| `SCHED_OPENBAO_ADDR`    | — (fase 4)                     |
-| `SCHED_OPENBAO_ROLE_ID` | — (fase 4)                     |
-| `SCHED_OPENBAO_SECRET_ID` | — (fase 4)                   |
+| `SCHED_OPENBAO_ADDR`    | — (worker en scheduler)        |
+| `SCHED_OPENBAO_ROLE_ID` | — (AppRole per rol)            |
+| `SCHED_OPENBAO_SECRET_ID` | —                            |
+| `SCHED_OPENBAO_KV_MOUNT` | `secret`                      |
+| `SCHED_OPENBAO_CA_CERT` | — (systeem-CA's)               |
 | `SCHED_OIDC_ISSUER`     | — (leeg = alleen lokale login) |
 | `SCHED_OIDC_AUDIENCE`   | — (default: client-id)         |
 
@@ -355,6 +356,34 @@ audit, CSRF) en **4b** OpenBao (credentials, git-tokens, webhook-URL's)._
 - **Dev:** Keycloak 26.7.4 met een realm-import. Het client-secret en de
   testwachtwoorden worden door `scripts/dev-keys.sh` in `.dev/` gegenereerd.
 
+**Uitwerking 4b**
+- **OpenBao-client** (hvac): AppRole-login. Vóór elke read wordt de token vernieuwd
+  zodra minder dan een derde van de TTL over is. Lukt vernieuwen niet, of is de max-TTL
+  bereikt, dan volgt een nieuwe login; bij een 403 één keer opnieuw. Er wordt uit KV v2
+  gelezen. Foutmeldingen bevatten alleen pad en key.
+- **Padconventie en policies** (least privilege):
+
+  | Pad (mount `secret`) | Inhoud | Leesbaar voor |
+  |---|---|---|
+  | `ssh/<naam>` | SSH-key onder `openbao_key` | worker |
+  | `vault/<naam>` | vault-wachtwoord onder `openbao_key` | worker |
+  | `git/<naam>` | token onder `openbao_key`, optioneel `username` (default `x-access-token`) | worker |
+  | `webhooks/<naam>` | `urls` (JSON-lijst), optioneel `hmac_secret` | scheduler |
+
+  De API leest geen secrets.
+- **Git via https:** `projects.credential_id` verwijst naar een `git_token`-credential.
+  Clone en fetch gaan via een askpass-script met bestanden (0600) in de private data dir.
+  De token komt niet in de URL, de procesargumenten, de omgeving of de config van de
+  cache-repo, en `credential.helper` staat leeg.
+- **Webhooks:** de worker zet bij een fout-status één outbox-rij met `target='*'` en
+  kent geen webhook-secrets. De scheduler-leider leest de config uit OpenBao (gecachet
+  `SCHED_WEBHOOK_CACHE_S`) en splitst `*` uit naar één rij per URL-fingerprint. Is
+  OpenBao niet bereikbaar, dan blijft de `*`-rij staan.
+- **Dev:** OpenBao 2.7.0 in dev-mode met `openbao-init` (policies, AppRoles met TTL 60s
+  en max 300s, dev-secrets). Daarnaast een `git-http`-container (git http-backend met
+  basic-auth). `scripts/it-secret-scan.sh` doorzoekt de containerlogs op alle
+  dev-secrets.
+
 **Scope:** een OpenBao-client (AppRole-login, token renew), credential resolutie in de
 worker, Keycloak OIDC-validatie (JWT via JWKS) en RBAC op client roles `viewer`,
 `operator` en `admin`. Een audit log-tabel en `triggered_by` met subject.
@@ -401,7 +430,6 @@ proxy.
 - **Lockout per gebruikersnaam:** voorkomt brute force op één account. Een aanvaller kan
   daarmee wel een account tijdelijk blokkeren. Een rate limit per IP komt er in fase 5
   bij, via de proxy.
-- **Webhook-URL's naar OpenBao (fase 4):** nu staan ze als JSON-lijst in de env.
 - **Metrics en retentie (fase 5):** `sched_runs_total` wordt uit de runs-tabel geteld.
   Retentie laat de waarde dalen, wat Prometheus als counter-reset ziet. Oplossing: een
   aggregatietabel bijhouden of de metric als gauge exposen.
@@ -422,8 +450,10 @@ proxy.
 - **Host key checking in productie:** in dev staat het uit. Voor productie is een
   known_hosts-beheer nodig (per inventory of project), anders falen runs of moet
   checking uit (fase 4 of 5).
-- **Git-credentials:** `projects.credential_id` (type `git_token`) wordt nog niet
-  gebruikt; alleen publieke of `file://`-repo's werken. Oppakken in fase 4 met OpenBao.
 - **Remote processen bij cancel/timeout:** ansible-runner stopt het lokale
   ansible-proces; een lopend commando op de target (bv. `sleep`) loopt daar door.
-- **Productie-credentials:** tot fase 4 heeft `compose.yml` geen credential-backend.
+- **Secret-id's van AppRoles** staan nu als env-bestand op de host. Beter: response
+  wrapping of een kortlevende secret-id per deploy, uitgedeeld door de Ansible-rol
+  (fase 5).
+- **Dev-OpenBao is in-memory:** herstart je alleen `openbao`, dan zijn de secrets weg
+  tot `openbao-init` opnieuw draait (`podman compose up -d`).

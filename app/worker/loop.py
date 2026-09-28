@@ -10,8 +10,9 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from app.core.config import Settings
 from app.core.db import get_sessionmaker
+from app.core.openbao import get_openbao
 from app.services import queue
-from app.worker.credentials import CredentialResolver, DevFileResolver, UnconfiguredResolver
+from app.worker.credentials import CredentialResolver, OpenBaoResolver, UnconfiguredResolver
 from app.worker.executor import Executor
 from app.worker.git import RepoCache
 from app.worker.locking import PgTemplateLocker
@@ -19,10 +20,12 @@ from app.worker.locking import PgTemplateLocker
 log = logging.getLogger(__name__)
 
 
-def _resolver(settings: Settings) -> CredentialResolver:
-    if settings.dev_secrets_dir is not None:
-        return DevFileResolver(settings.dev_secrets_dir)
-    return UnconfiguredResolver()
+def _resolver() -> CredentialResolver:
+    client = get_openbao()
+    if client is None:
+        log.warning("OpenBao is not configured: runs that need credentials will fail")
+        return UnconfiguredResolver()
+    return OpenBaoResolver(client)
 
 
 def recover(settings: Settings, sm: sessionmaker[Session], repos: RepoCache) -> None:
@@ -56,7 +59,7 @@ def run_worker(settings: Settings) -> int:
     settings.runtime_dir.mkdir(parents=True, exist_ok=True)
     sm = get_sessionmaker()
     repos = RepoCache(settings.repo_cache_dir)
-    executor = Executor(settings, sm, _resolver(settings), repos)
+    executor = Executor(settings, sm, _resolver(), repos)
     locker = PgTemplateLocker(settings.worker_id)
 
     recover(settings, sm, repos)

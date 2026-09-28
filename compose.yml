@@ -1,6 +1,9 @@
 # Productie (minimaal; wordt in fase 5 afgemaakt). Vereist in .env:
-#   SCHED_IMAGE, POSTGRES_PASSWORD
-# Let op: tot fase 3 (OpenBao) is er in productie geen credential-backend.
+#   SCHED_IMAGE, POSTGRES_PASSWORD, SCHED_PUBLIC_URL, SCHED_OPENBAO_ADDR
+# Per rol een eigen AppRole via een env-bestand (niet in git):
+#   secrets/worker.env     SCHED_OPENBAO_ROLE_ID, SCHED_OPENBAO_SECRET_ID (sched-worker)
+#   secrets/scheduler.env  SCHED_OPENBAO_ROLE_ID, SCHED_OPENBAO_SECRET_ID (sched-scheduler)
+# OpenBao zelf draait extern. Policies: zie docs/plan.md (Fase 4b).
 
 x-app: &app
   image: ${SCHED_IMAGE:?set SCHED_IMAGE}
@@ -8,6 +11,7 @@ x-app: &app
   environment: &app-env
     SCHED_DATABASE_URL: postgresql+psycopg://scheduler:${POSTGRES_PASSWORD:?}@postgres:5432/scheduler
     SCHED_LOG_LEVEL: INFO
+    SCHED_PUBLIC_URL: ${SCHED_PUBLIC_URL:?}
   depends_on:
     migrate:
       condition: service_completed_successfully
@@ -55,11 +59,22 @@ services:
   scheduler:
     <<: *app
     command: ["scheduler"]
+    environment:
+      <<: *app-env
+      SCHED_OPENBAO_ADDR: ${SCHED_OPENBAO_ADDR:?}
+      SCHED_WEBHOOK_OPENBAO_PATH: ${SCHED_WEBHOOK_OPENBAO_PATH:-}
+    env_file:
+      - secrets/scheduler.env
 
   worker:
     <<: *app
     command: ["worker"]
     stop_grace_period: 1h
+    environment:
+      <<: *app-env
+      SCHED_OPENBAO_ADDR: ${SCHED_OPENBAO_ADDR:?}
+    env_file:
+      - secrets/worker.env
     tmpfs:
       - /run/scheduler:size=1g,uid=10001,gid=10001,mode=0700
     volumes:

@@ -44,7 +44,9 @@ class Handler(BaseHTTPRequestHandler):
                     fail_next -= 1
                     self._json(500, {"error": "sink told to fail"})
                     return
-                received.append({"headers": dict(self.headers), "raw": raw.decode()})
+                received.append(
+                    {"path": self.path, "headers": dict(self.headers), "raw": raw.decode()}
+                )
                 self._json(200, {"ok": True})
             elif url.path == "/fail":
                 fail_next = int(parse_qs(url.query).get("n", ["1"])[0])

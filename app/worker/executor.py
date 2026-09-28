@@ -14,10 +14,16 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from app.core.config import Settings
 from app.models import Credential, Inventory, Project, Run, RunStatus, Template
-from app.services import notifications, queue
+from app.services import queue
 from app.services.events import SecretMasker, filter_event
-from app.worker.credentials import CredentialError, CredentialRef, CredentialResolver
-from app.worker.git import RepoCache
+from app.worker.credentials import (
+    CredentialError,
+    CredentialRef,
+    CredentialResolver,
+    resolve,
+    resolve_git,
+)
+from app.worker.git import GitError, RepoCache
 
 log = logging.getLogger(__name__)
 
@@ -60,6 +66,7 @@ class RunSpec:
     timeout_s: int | None
     machine_credential: CredentialRef
     vault_credential: CredentialRef | None
+    git_credential: CredentialRef | None = None
 
 
 def _ref(cred: Credential) -> CredentialRef:
@@ -84,6 +91,13 @@ def load_spec(session: Session, run_id: int) -> RunSpec:
             raise RunSetupError(f"machine credential {machine.id} is not of type ssh_key")
         if vault is not None and vault.type != "vault_password":
             raise RunSetupError(f"vault credential {vault.id} is not of type vault_password")
+        git = (
+            session.get_one(Credential, project.credential_id)
+            if project.credential_id is not None
+            else None
+        )
+        if git is not None and git.type != "git_token":
+            raise RunSetupError(f"project credential {git.id} is not of type git_token")
         return RunSpec(
             run_id=run.id,
             project_id=project.id,
@@ -101,6 +115,7 @@ def load_spec(session: Session, run_id: int) -> RunSpec:
             timeout_s=template.timeout_s,
             machine_credential=_ref(machine),
             vault_credential=_ref(vault) if vault else None,
+            git_credential=_ref(git) if git else None,
         )
 
 
@@ -225,7 +240,7 @@ class Executor:
                 reason = "canceled by user"
             elif status == RunStatus.TIMEOUT:
                 reason = f"exceeded timeout of {spec.timeout_s}s"
-        except (RunSetupError, CredentialError) as exc:
+        except (RunSetupError, CredentialError, GitError) as exc:
             reason = str(exc)
             log.warning("run setup failed", extra={"run_id": run_id, "reason": reason})
         except Exception as exc:
@@ -246,7 +261,6 @@ class Executor:
                     rc=rc,
                     stats=stats,
                     reason=reason,
-                    notify_targets=list(notifications.targets(self._settings.webhook_urls)),
                 )
             log.info("run finished", extra={"run_id": run_id, "status": status, "rc": rc})
         return status
@@ -255,7 +269,23 @@ class Executor:
         self, spec: RunSpec, run_dir: Path
     ) -> tuple[RunStatus, int | None, dict[str, Any] | None]:
         project_dir = run_dir / "project"
-        sha = self._repos.checkout(spec.project_id, spec.git_url, spec.branch, project_dir)
+        secrets: list[str] = []
+        git_auth = None
+        if spec.git_credential is not None:
+            git_auth = resolve_git(self._resolver, spec.git_credential)
+            secrets.append(git_auth.token)
+        try:
+            sha = self._repos.checkout(
+                spec.project_id,
+                spec.git_url,
+                spec.branch,
+                project_dir,
+                auth=git_auth,
+                auth_dir=run_dir / "git-auth",
+            )
+        except GitError as exc:
+            # git-uitvoer kan in theorie de token bevatten; maskeren vóór opslag.
+            raise GitError(SecretMasker(secrets).mask(str(exc))) from None
         with self._sm() as session:
             queue.set_commit(session, spec.run_id, sha)
 
@@ -267,14 +297,14 @@ class Executor:
         else:
             inventory = _inside(project_dir, spec.inventory_path or "")
 
-        ssh_key = self._resolver.resolve(spec.machine_credential)
+        ssh_key = resolve(self._resolver, spec.machine_credential)
         if not ssh_key.endswith("\n"):
             ssh_key += "\n"
-        secrets = [ssh_key]
+        secrets.append(ssh_key)
 
         cmdline: str | None = None
         if spec.vault_credential is not None:
-            vault_password = self._resolver.resolve(spec.vault_credential)
+            vault_password = resolve(self._resolver, spec.vault_credential)
             secrets.append(vault_password)
             vault_file = run_dir / "vault_password"
             vault_file.touch(mode=0o600)

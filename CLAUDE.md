@@ -40,7 +40,7 @@ tests/
   integration/     # draait tegen compose.dev.yml
 docs/plan.md
 compose.yml        # productie
-compose.dev.yml    # dev: postgres + ssh-target container
+compose.dev.yml    # dev: postgres, ssh-target, keycloak, openbao, git-http, webhook-sink
 ```
 
 ## Commando's
@@ -64,6 +64,7 @@ $DEV pytest tests/unit
 $DEV pytest tests/integration     # vereist draaiende compose.dev.yml
 $DEV pytest tests/integration -m "not slow"   # zonder de tests die minuten op cron wachten
 scripts/it-failover.sh            # op de host: kill de scheduler-leider, check takeover
+scripts/it-secret-scan.sh         # op de host: geen dev-secrets in de containerlogs
 
 # migraties
 $DEV alembic revision --autogenerate -m "<omschrijving>"

@@ -10,11 +10,12 @@ from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import httpx
-from pydantic import SecretStr
 from sqlalchemy import func, select
+from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
 
 from app.models import Notification, Run, Template
+from app.services.queue import ALL_TARGETS
 
 log = logging.getLogger(__name__)
 
@@ -31,8 +32,54 @@ def fingerprint(url: str) -> str:
     return hashlib.sha256(url.encode()).hexdigest()[:16]
 
 
-def targets(urls: Sequence[SecretStr]) -> dict[str, str]:
-    return {fingerprint(u.get_secret_value()): u.get_secret_value() for u in urls}
+@dataclass(frozen=True)
+class WebhookConfig:
+    """Uit OpenBao: `urls` (JSON-lijst) en optioneel `hmac_secret`."""
+
+    urls: tuple[str, ...]
+    hmac_secret: str | None = None
+
+    def __repr__(self) -> str:  # URL's en secret nooit in logs
+        secret = "***" if self.hmac_secret else None
+        return f"WebhookConfig(urls={len(self.urls)}, hmac_secret={secret})"
+
+    @classmethod
+    def from_secret(cls, values: Mapping[str, str]) -> "WebhookConfig":
+        raw = values.get("urls", "[]")
+        try:
+            urls = json.loads(raw)
+        except json.JSONDecodeError as exc:
+            raise ValueError("webhook secret: 'urls' must be a JSON list") from exc
+        if not isinstance(urls, list) or not all(isinstance(u, str) for u in urls):
+            raise ValueError("webhook secret: 'urls' must be a JSON list of strings")
+        return cls(tuple(urls), values.get("hmac_secret") or None)
+
+    def targets(self) -> dict[str, str]:
+        return {fingerprint(u): u for u in self.urls}
+
+
+def expand_pending(session: Session, fingerprints: Sequence[str]) -> int:
+    """Splits `*`-rijen uit naar één rij per huidig webhook-doel. Zonder doelen vervalt
+    de `*`-rij. Geeft het aantal uitgesplitste runs terug. Commit niet."""
+    stars = session.scalars(
+        select(Notification)
+        .where(Notification.target == ALL_TARGETS, Notification.status == "pending")
+        .with_for_update(skip_locked=True)
+    ).all()
+    for star in stars:
+        if fingerprints:
+            session.execute(
+                insert(Notification)
+                .values(
+                    [
+                        {"run_id": star.run_id, "target": fp, "event": star.event}
+                        for fp in fingerprints
+                    ]
+                )
+                .on_conflict_do_nothing(constraint="uq_notifications_run_id_target")
+            )
+        session.delete(star)
+    return len(stars)
 
 
 def backoff(attempts: int) -> timedelta:
@@ -82,10 +129,13 @@ def deliver_due(
     dus meerdere verzenders zitten elkaar niet in de weg."""
     sent = retried = failed = 0
     with session.begin():
+        expand_pending(session, list(urls))
+        session.flush()
         due = session.scalars(
             select(Notification)
             .where(
                 Notification.status == "pending",
+                Notification.target != ALL_TARGETS,
                 Notification.next_attempt_at <= (now or func.now()),
             )
             .order_by(Notification.next_attempt_at)
