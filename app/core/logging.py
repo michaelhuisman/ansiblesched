@@ -3,7 +3,7 @@ import logging
 import sys
 from datetime import UTC, datetime
 
-# Attributen die elk LogRecord standaard heeft; alles daarbuiten komt uit `extra=`.
+# Attributes every LogRecord has by default; anything else comes from `extra=`.
 _RESERVED = set(vars(logging.makeLogRecord({}))) | {"message", "asctime", "color_message"}
 
 

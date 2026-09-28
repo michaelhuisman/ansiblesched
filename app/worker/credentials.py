@@ -1,4 +1,4 @@
-"""Just-in-time ophalen van secretwaarden op basis van een credential-referentie."""
+"""Just-in-time retrieval of secret values based on a credential reference."""
 
 from collections.abc import Mapping
 from dataclasses import dataclass
@@ -26,18 +26,18 @@ class GitAuth:
     username: str
     token: str
 
-    def __repr__(self) -> str:  # nooit de token in logs of tracebacks
+    def __repr__(self) -> str:  # never the token in logs or tracebacks
         return f"GitAuth(username={self.username!r}, token='***')"
 
 
 class CredentialResolver(Protocol):
     def fields(self, ref: CredentialRef) -> Mapping[str, str]:
-        """Alle velden van het secret waar de credential naar verwijst."""
+        """All fields of the secret the credential refers to."""
         ...
 
 
 def resolve(resolver: CredentialResolver, ref: CredentialRef) -> str:
-    """De waarde onder `openbao_key` (SSH-key, vault-wachtwoord)."""
+    """The value under `openbao_key` (SSH key, vault password)."""
     values = resolver.fields(ref)
     if ref.openbao_key not in values:
         raise CredentialError(f"credential {ref.id}: key {ref.openbao_key!r} not found")
@@ -45,7 +45,7 @@ def resolve(resolver: CredentialResolver, ref: CredentialRef) -> str:
 
 
 def resolve_git(resolver: CredentialResolver, ref: CredentialRef) -> GitAuth:
-    """Token onder `openbao_key`, gebruikersnaam uit key `username` (optioneel)."""
+    """Token under `openbao_key`, username from key `username` (optional)."""
     values = resolver.fields(ref)
     if ref.openbao_key not in values:
         raise CredentialError(f"credential {ref.id}: key {ref.openbao_key!r} not found")

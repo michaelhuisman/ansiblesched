@@ -1,6 +1,6 @@
-"""UI: beheer van projecten, inventories en credentials.
+"""UI: management of projects, inventories and credentials.
 
-Credentials zijn alleen referenties naar OpenBao; de UI neemt nooit secretwaarden aan.
+Credentials are only references to OpenBao; the UI never accepts secret values.
 """
 
 import html
@@ -28,10 +28,10 @@ Choices = Callable[[SessionDep], dict[str, Any]]
 
 @dataclass(frozen=True)
 class Kind:
-    slug: str  # URL-deel en templatenaam: /ui/<slug>, <slug>.html, <slug>_form.html
+    slug: str  # URL part and template name: /ui/<slug>, <slug>.html, <slug>_form.html
     model: type[Entity]
     schema: type[BaseModel]
-    prepare: Callable[[FormData], FormData]  # formulier -> schema-invoer
+    prepare: Callable[[FormData], FormData]  # form -> schema input
     choices: Choices
 
 
@@ -49,8 +49,8 @@ def _inventory_choices(session: SessionDep) -> dict[str, Any]:
 
 
 def _prepare_inventory(data: FormData) -> FormData:
-    # Het formulier stuurt de velden van beide bronnen mee; alleen die van de gekozen bron
-    # tellen.
+    # The form sends the fields of both sources; only those of the chosen source
+    # count.
     if data.get("source_type") == "inline":
         data["path"] = None
     else:

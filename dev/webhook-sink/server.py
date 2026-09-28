@@ -1,9 +1,9 @@
-"""Webhook-ontvanger voor dev en integratietests (alleen stdlib).
+"""Webhook receiver for dev and integration tests (stdlib only).
 
-POST /hook           ontvangt een webhook (faalt met 500 zolang fail_next > 0)
-GET  /received       alle ontvangen webhooks: [{"headers": {...}, "body": {...}}]
-POST /fail?n=2       laat de volgende n webhooks falen
-POST /reset          wist alles
+POST /hook           receives a webhook (fails with 500 while fail_next > 0)
+GET  /received       all received webhooks: [{"headers": {...}, "body": {...}}]
+POST /fail?n=2       make the next n webhooks fail
+POST /reset          clears everything
 """
 
 import json

@@ -1,4 +1,4 @@
-"""Worker-kant van de queue: claimen, status bijwerken, events opslaan."""
+"""Worker side of the queue: claiming, updating status, storing events."""
 
 from collections.abc import Sequence
 from dataclasses import dataclass
@@ -11,13 +11,13 @@ from app.core.locks import NS_TEMPLATE
 from app.models import Notification, Run, RunEvent, RunStatus
 
 CLAIM_BATCH = 20
-# Outbox-rij die de scheduler nog moet uitsplitsen naar de huidige webhook-doelen.
+# Outbox row that the scheduler still has to expand to the current webhook targets.
 ALL_TARGETS = "*"
 NOTIFY_STATUSES = frozenset({RunStatus.FAILED, RunStatus.ERROR, RunStatus.TIMEOUT})
 
 
 class TemplateLocker(Protocol):
-    """Overlap-lock per template; in de worker een sessie-lock op een eigen connectie."""
+    """Overlap lock per template; in the worker a session lock on a dedicated connection."""
 
     def try_lock(self, template_id: int) -> bool: ...
 
@@ -30,8 +30,8 @@ class Claimed:
     template_id: int
 
 
-# Templates waarvan nu ergens een run loopt. Alleen een hint om te voorkomen dat
-# wachtende 'queue'-runs de batch vullen; try_lock blijft de echte beslissing.
+# Templates that have a run going somewhere right now. Only a hint to keep waiting
+# 'queue' runs from filling the batch; try_lock remains the real decision.
 _BUSY_TEMPLATES = text(
     "runs.template_id NOT IN (SELECT objid::bigint FROM pg_locks"
     " WHERE locktype = 'advisory' AND classid = :ns AND objsubid = 2 AND granted)"
@@ -39,11 +39,11 @@ _BUSY_TEMPLATES = text(
 
 
 def claim(session: Session, worker_id: str, locker: TemplateLocker) -> Claimed | None:
-    """Claim de oudste run waarvan het template vrij is.
+    """Claim the oldest run whose template is free.
 
-    - Concurrerende workers slaan elkaars gelockte rijen over (SKIP LOCKED).
-    - Is het template bezet: 'skip'-runs worden direct `skipped`, 'queue'-runs blijven
-      staan en de volgende kandidaat wordt geprobeerd.
+    - Competing workers skip each other's locked rows (SKIP LOCKED).
+    - If the template is busy: 'skip' runs become `skipped` immediately, 'queue' runs
+      stay put and the next candidate is tried.
     """
     candidates = (
         select(Run.id, Run.template_id, Run.overlap_policy)
@@ -103,9 +103,9 @@ def finish(
     stats: dict[str, Any] | None = None,  # ansible-runner stats: JSON
     reason: str | None = None,
 ) -> None:
-    """Rond de run af. Bij een fout-status komt in dezelfde transactie een notificatie
-    in de outbox, zodat die ook na een crash nog verstuurd wordt. De worker kent de
-    webhook-doelen niet: de scheduler splitst de `*`-rij uit (zie notifications)."""
+    """Finish the run. On an error status a notification goes into the outbox in the same
+    transaction, so it is still sent after a crash. The worker does not know the
+    webhook targets: the scheduler expands the `*` row (see notifications)."""
     with session.begin():
         finished = session.scalar(
             update(Run)
@@ -127,7 +127,7 @@ def finish(
             )
 
 
-# Rijen voor run_events; de sleutels komen overeen met de kolommen.
+# Rows for run_events; the keys match the columns.
 def add_events(session: Session, rows: Sequence[dict[str, Any]]) -> None:
     if not rows:
         return
@@ -136,7 +136,7 @@ def add_events(session: Session, rows: Sequence[dict[str, Any]]) -> None:
 
 
 def fail_orphaned(session: Session, worker_id: str) -> list[int]:
-    """Runs die nog op 'running' staan voor deze worker zijn bij een crash blijven hangen."""
+    """Runs still in 'running' for this worker got stuck in a crash."""
     with session.begin():
         result = session.execute(
             update(Run)
@@ -150,7 +150,7 @@ def fail_orphaned(session: Session, worker_id: str) -> list[int]:
 
 
 def active_elsewhere(session: Session, run_ids: Sequence[int], worker_id: str) -> set[int]:
-    """Welke van deze runs draaien nu bij een andere worker."""
+    """Which of these runs are currently running on another worker."""
     if not run_ids:
         return set()
     with session.begin():

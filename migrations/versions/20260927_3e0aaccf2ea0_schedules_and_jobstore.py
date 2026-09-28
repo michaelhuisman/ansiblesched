@@ -72,7 +72,7 @@ def upgrade() -> None:
     op.add_column(
         "runs", sa.Column("overlap_policy", sa.Text(), server_default="queue", nullable=False)
     )
-    # Handmatig: autogenerate ziet geen CHECK-constraints op bestaande tabellen.
+    # Manual: autogenerate does not see CHECK constraints on existing tables.
     op.create_check_constraint(
         op.f("ck_runs_overlap_policy"), "runs", "overlap_policy IN ('skip', 'queue')"
     )

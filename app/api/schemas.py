@@ -18,7 +18,7 @@ def _relative_path(value: str) -> str:
 RelPath = Annotated[str, AfterValidator(_relative_path)]
 Name = Annotated[str, Field(min_length=1, max_length=200)]
 NonEmpty = Annotated[str, Field(min_length=1)]
-# Extra vars zijn vrije JSON voor Ansible.
+# Extra vars are free-form JSON for Ansible.
 ExtraVars = dict[str, Any]
 
 
@@ -118,7 +118,7 @@ class TemplateOut(TemplateIn, OrmModel):
 
 class ScheduleIn(BaseModel):
     template_id: int
-    cron: str = Field(description="5 velden: minuut uur dag maand weekdag")
+    cron: str = Field(description="5 fields: minute hour day month weekday")
     timezone: str = "UTC"
     enabled: bool = True
     overlap_policy: Literal["skip", "queue"] = "skip"
@@ -248,7 +248,7 @@ class TokenOut(OrmModel):
 
 
 class TokenCreated(TokenOut):
-    token: str = Field(description="Wordt alleen nu getoond")
+    token: str = Field(description="Only shown now")
 
 
 class AuditOut(OrmModel):

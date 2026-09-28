@@ -1,4 +1,4 @@
-"""Webhook-notificaties vanuit de outbox (`notifications`), met retry en backoff."""
+"""Webhook notifications from the outbox (`notifications`), with retry and backoff."""
 
 import hashlib
 import hmac
@@ -28,18 +28,18 @@ SIGNATURE_HEADER = "X-Lamplighter-Signature"
 
 
 def fingerprint(url: str) -> str:
-    """Stabiele, niet-terug-te-rekenen id van een webhook-URL (voor de outbox)."""
+    """Stable, non-reversible id of a webhook URL (for the outbox)."""
     return hashlib.sha256(url.encode()).hexdigest()[:16]
 
 
 @dataclass(frozen=True)
 class WebhookConfig:
-    """Uit OpenBao: `urls` (JSON-lijst) en optioneel `hmac_secret`."""
+    """From OpenBao: `urls` (JSON list) and optionally `hmac_secret`."""
 
     urls: tuple[str, ...]
     hmac_secret: str | None = None
 
-    def __repr__(self) -> str:  # URL's en secret nooit in logs
+    def __repr__(self) -> str:  # never URLs or secret in logs
         secret = "***" if self.hmac_secret else None
         return f"WebhookConfig(urls={len(self.urls)}, hmac_secret={secret})"
 
@@ -59,8 +59,8 @@ class WebhookConfig:
 
 
 def expand_pending(session: Session, fingerprints: Sequence[str]) -> int:
-    """Splits `*`-rijen uit naar één rij per huidig webhook-doel. Zonder doelen vervalt
-    de `*`-rij. Geeft het aantal uitgesplitste runs terug. Commit niet."""
+    """Expand `*` rows into one row per current webhook target. Without targets the `*`
+    row is dropped. Returns the number of expanded runs. Does not commit."""
     stars = session.scalars(
         select(Notification)
         .where(Notification.target == ALL_TARGETS, Notification.status == "pending")
@@ -83,7 +83,7 @@ def expand_pending(session: Session, fingerprints: Sequence[str]) -> int:
 
 
 def backoff(attempts: int) -> timedelta:
-    """Wachttijd na `attempts` mislukte pogingen: 5s, 10s, 20s, ... max 10 min."""
+    """Delay after `attempts` failed attempts: 5s, 10s, 20s, ... max 10 min."""
     seconds = min(BASE_BACKOFF_S * 2 ** max(attempts - 1, 0), MAX_BACKOFF_S)
     return timedelta(seconds=seconds)
 
@@ -125,8 +125,8 @@ def deliver_due(
     secret: str | None,
     now: datetime | None = None,
 ) -> DeliveryResult:
-    """Verstuur notificaties die aan de beurt zijn. Rijen worden met SKIP LOCKED geclaimd,
-    dus meerdere verzenders zitten elkaar niet in de weg."""
+    """Send notifications that are due. Rows are claimed with SKIP LOCKED, so multiple
+    senders don't get in each other's way."""
     sent = retried = failed = 0
     with session.begin():
         expand_pending(session, list(urls))
@@ -174,7 +174,7 @@ def _send(
     public_url: str,
     secret: str | None,
 ) -> str | None:
-    """Geeft None bij succes, anders een foutmelding zonder URL (die kan een token bevatten)."""
+    """Returns None on success, otherwise an error without the URL (it may contain a token)."""
     if url is None:
         return "target no longer configured"
     body = json.dumps(build_payload(run, template, note.event, public_url)).encode()

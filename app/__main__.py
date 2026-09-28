@@ -20,11 +20,11 @@ def main() -> int:
 
 
 def _read_password() -> str:
-    """Wachtwoord interactief of via stdin; nooit via argv of env (zichtbaar in ps/logs)."""
+    """Password interactively or via stdin; never via argv or env (visible in ps/logs)."""
     if sys.stdin.isatty():
-        first = getpass.getpass("Wachtwoord: ")
-        if first != getpass.getpass("Nogmaals: "):
-            raise SystemExit("wachtwoorden komen niet overeen")
+        first = getpass.getpass("Password: ")
+        if first != getpass.getpass("Repeat: "):
+            raise SystemExit("passwords do not match")
         return first
     return sys.stdin.readline().rstrip("\n")
 
@@ -34,13 +34,13 @@ def _parser() -> argparse.ArgumentParser:
     sub = parser.add_subparsers(dest="command", required=True)
     for role in ROLES:
         sub.add_parser(role)
-    user = sub.add_parser("create-user", help="lokale gebruiker aanmaken")
+    user = sub.add_parser("create-user", help="create a local user")
     user.add_argument("username")
     user.add_argument(
         "--role", action="append", default=[], choices=["viewer", "operator", "admin"]
     )
     user.add_argument("--display-name")
-    token = sub.add_parser("create-token", help="API-token voor een lokale gebruiker")
+    token = sub.add_parser("create-token", help="API token for a local user")
     token.add_argument("username")
     token.add_argument("--name", required=True)
     token.add_argument("--expires-days", type=int, default=90)
@@ -67,7 +67,7 @@ def _run() -> int:
             host=settings.api_host,
             port=settings.api_port,
             log_config=None,
-            # X-Forwarded-For/-Proto alleen van vertrouwde proxies (fase 5a).
+            # X-Forwarded-For/-Proto only from trusted proxies (phase 5a).
             proxy_headers=True,
             forwarded_allow_ips=settings.trusted_proxies,
         )
@@ -105,11 +105,11 @@ def _run() -> int:
         if args.command == "create-token":
             owner = users.get_local(session, args.username)
             if owner is None:
-                raise SystemExit(f"onbekende lokale gebruiker: {args.username}")
+                raise SystemExit(f"unknown local user: {args.username}")
             new = api_tokens.create(
                 session, owner, args.name, expires_days=args.expires_days, actor=cli
             )
-            # Bewust naar stdout en niet via logging: dit is de uitvoer van het commando.
+            # Deliberately to stdout and not via logging: this is the command's output.
             sys.stdout.write(new.raw + "\n")
             return 0
     return 2

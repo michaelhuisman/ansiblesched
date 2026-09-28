@@ -7,10 +7,10 @@ from app.models.base import Entity
 
 
 class Notification(Entity):
-    """Outbox voor webhooks: één rij per run en per doel.
+    """Outbox for webhooks: one row per run and per target.
 
-    `target` is een fingerprint van de webhook-URL, niet de URL zelf: die bevat vaak een
-    token en hoort niet in de database.
+    `target` is a fingerprint of the webhook URL, not the URL itself: that often contains
+    a token and does not belong in the database.
     """
 
     __tablename__ = "notifications"

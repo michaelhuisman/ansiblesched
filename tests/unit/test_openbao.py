@@ -23,7 +23,7 @@ class FakeClock:
 
 
 class Hvac:
-    """Het deel van hvac.Client dat OpenBaoClient gebruikt."""
+    """The part of hvac.Client that OpenBaoClient uses."""
 
     def __init__(self) -> None:
         self.logins = 0
@@ -89,7 +89,7 @@ def test_first_read_logs_in(fake: Hvac, clock: FakeClock) -> None:
 def test_no_renew_while_plenty_of_ttl(fake: Hvac, clock: FakeClock) -> None:
     client = make(fake, clock)
     client.read("ssh/a")
-    clock.t += 30  # 30 van 60s over (> 1/3)
+    clock.t += 30  # 30 of 60s left (> 1/3)
     client.read("ssh/a")
     assert (fake.logins, fake.renews) == (1, 0)
 
@@ -105,8 +105,8 @@ def test_renews_when_ttl_runs_low(fake: Hvac, clock: FakeClock) -> None:
 def test_relogin_when_max_ttl_reached(fake: Hvac, clock: FakeClock) -> None:
     client = make(fake, clock)
     client.read("ssh/a")
-    clock.t += 50  # 10s over
-    fake.renew_ttl = 5  # max-TTL: renew levert minder op dan er nog is
+    clock.t += 50  # 10s left
+    fake.renew_ttl = 5  # max TTL: renew yields less than what is left
     client.read("ssh/a")
     assert fake.logins == 2
 
@@ -134,7 +134,7 @@ def test_relogin_when_expired_or_not_renewable(fake: Hvac, clock: FakeClock) -> 
 def test_forbidden_read_retries_once_after_login(fake: Hvac, clock: FakeClock) -> None:
     client = make(fake, clock)
     client.read("ssh/a")
-    fake.forbidden_reads = 1  # bv. token ingetrokken
+    fake.forbidden_reads = 1  # e.g. token revoked
     assert client.read("ssh/a")["id_ed25519"] == "KEY"
     assert fake.logins == 2
     fake.forbidden_reads = 2
@@ -168,7 +168,7 @@ def test_askpass_script(tmp_path: Path) -> None:
     assert opts[2:] == ["-c", "credential.helper="]
     assert stat.S_IMODE(auth_dir.stat().st_mode) == 0o700
     assert stat.S_IMODE((auth_dir / "token").stat().st_mode) == 0o600
-    assert "tok'en" not in script.read_text()  # token staat niet in het script zelf
+    assert "tok'en" not in script.read_text()  # the token is not in the script itself
     assert os.access(script, os.X_OK)
 
     def ask(prompt: str) -> str:

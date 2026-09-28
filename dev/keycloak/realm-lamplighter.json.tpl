@@ -6,9 +6,9 @@
   "roles": {
     "client": {
       "lamplighter": [
-        {"name": "viewer", "description": "Alleen lezen"},
-        {"name": "operator", "description": "Lezen, launchen en annuleren"},
-        {"name": "admin", "description": "Alles, inclusief configuratie en gebruikers"}
+        {"name": "viewer", "description": "Read only"},
+        {"name": "operator", "description": "Read, launch and cancel"},
+        {"name": "admin", "description": "Everything, including configuration and users"}
       ]
     }
   },
@@ -42,7 +42,7 @@
     },
     {
       "clientId": "lamplighter-tests",
-      "name": "Alleen voor integratietests (password grant)",
+      "name": "Integration tests only (password grant)",
       "protocol": "openid-connect",
       "publicClient": true,
       "standardFlowEnabled": false,

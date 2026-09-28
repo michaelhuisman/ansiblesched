@@ -1,12 +1,12 @@
-"""Authenticatie en autorisatie.
+"""Authentication and authorization.
 
-Een request wordt geauthenticeerd via (in deze volgorde):
-1. `Authorization: Bearer lamplighter_...`: persoonlijke API-token van een lokale gebruiker;
-2. `Authorization: Bearer <jwt>`: access token van de OIDC-provider (Keycloak);
-3. de sessiecookie van de UI. Schrijvende requests vereisen dan een CSRF-token
-   (header `X-CSRF-Token` of formulierveld `csrf_token`) en een passende Origin.
+A request is authenticated via (in this order):
+1. `Authorization: Bearer lamplighter_...`: personal API token of a local user;
+2. `Authorization: Bearer <jwt>`: access token from the OIDC provider (Keycloak);
+3. the UI session cookie. Write requests then require a CSRF token
+   (header `X-CSRF-Token` or form field `csrf_token`) and a matching Origin.
 
-Routes en templates gebruiken alleen `Principal.can(action)`.
+Routes and templates only use `Principal.can(action)`.
 """
 
 import hmac
@@ -48,7 +48,7 @@ ROLE_ACTIONS: dict[str, frozenset[Action]] = {
 
 @dataclass(frozen=True)
 class Principal:
-    subject: str  # 'local:<naam>' of 'oidc:<sub>'
+    subject: str  # 'local:<name>' or 'oidc:<sub>'
     roles: frozenset[str] = field(default_factory=frozenset)
     display_name: str | None = None
     user_id: int | None = None
@@ -82,7 +82,7 @@ def get_oidc_client() -> OidcClient | None:
 
 
 def client_ip(request: Request) -> str | None:
-    # Achter een reverse proxy (fase 5) komt hier X-Forwarded-For met een vertrouwde hop.
+    # Behind a reverse proxy (phase 5) this holds X-Forwarded-For with a trusted hop.
     return request.client.host if request.client else None
 
 
@@ -151,7 +151,7 @@ def _from_session(raw: str) -> Principal | None:
 def origin_allowed(request: Request) -> bool:
     origin = request.headers.get("Origin")
     if origin is None:
-        return True  # oudere clients; het CSRF-token is de echte controle
+        return True  # older clients; the CSRF token is the real check
     public = urlsplit(get_settings().public_url)
     got = urlsplit(origin)
     return (got.scheme, got.netloc) == (public.scheme, public.netloc)
@@ -164,7 +164,7 @@ async def check_csrf(request: Request, expected: str | None) -> None:
     if supplied is None and request.headers.get("content-type", "").startswith(
         ("application/x-www-form-urlencoded", "multipart/form-data")
     ):
-        form = await request.form()  # Starlette cachet het formulier voor de route
+        form = await request.form()  # Starlette caches the form for the route
         value = form.get(CSRF_FIELD)
         supplied = value if isinstance(value, str) else None
     if not expected or not supplied or not hmac.compare_digest(supplied, expected):

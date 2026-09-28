@@ -1,7 +1,7 @@
-"""Postgres advisory locks (sessie-niveau) op een eigen connectie.
+"""Postgres advisory locks (session level) on a dedicated connection.
 
-Sleutels gebruiken de twee-int4-vorm (namespace, id), zodat ze niet botsen met locks
-van andere toepassingen. In pg_locks: classid = namespace, objid = id, objsubid = 2.
+Keys use the two-int4 form (namespace, id) so they don't collide with locks of other
+applications. In pg_locks: classid = namespace, objid = id, objsubid = 2.
 """
 
 import psycopg
@@ -9,7 +9,7 @@ import psycopg
 NS_SCHEDULER = 0x5343  # "SC"
 NS_TEMPLATE = 0x5450  # "TP"
 SCHEDULER_LEADER_ID = 1
-MAINTENANCE_ID = 2  # retentie: nooit twee tegelijk, ook niet rond een failover
+MAINTENANCE_ID = 2  # retention: never two at once, not even around a failover
 
 _INT4_MAX = 2**31 - 1
 

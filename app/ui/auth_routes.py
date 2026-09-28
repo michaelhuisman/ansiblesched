@@ -1,4 +1,4 @@
-"""UI: inloggen (lokaal en OIDC), uitloggen, eigen account, gebruikersbeheer en audit."""
+"""UI: login (local and OIDC), logout, own account, user management and audit."""
 
 import base64
 import json
@@ -40,7 +40,7 @@ PASSWORDS_DIFFER = "The passwords do not match."
 
 
 def safe_next(value: str | None) -> str:
-    """Alleen relatieve paden binnen de UI (geen open redirect)."""
+    """Only relative paths within the UI (no open redirect)."""
     if value and value.startswith("/ui") and not value.startswith("//") and "\\" not in value:
         return value
     return DEFAULT_NEXT
@@ -62,7 +62,7 @@ def _redirect_uri(settings: Settings) -> str:
     return f"{settings.public_url.rstrip('/')}/ui/auth/callback"
 
 
-# --- inloggen / uitloggen --------------------------------------------------------
+# --- login / logout --------------------------------------------------------------
 
 
 @router.get("/login", response_class=HTMLResponse)
@@ -71,7 +71,7 @@ async def login_page(request: Request, next: Annotated[str | None, Query()] = No
         if await authenticate(request) is not None:
             return redirect(safe_next(next))
     except (NotAuthenticatedError, PermissionDeniedError):
-        pass  # ongeldige token of sessie: gewoon het loginscherm tonen
+        pass  # invalid token or session: just show the login screen
     return render(request, "login.html", None, next=safe_next(next), error=None)
 
 
@@ -153,7 +153,7 @@ def oidc_start(next: Annotated[str | None, Query()] = None) -> Response:
         redirect_uri=_redirect_uri(settings), state=state, nonce=nonce, pkce=pkce
     )
     response = redirect(url)
-    # Lax: de cookie gaat mee met de top-level redirect terug van de IdP.
+    # Lax: the cookie is sent along with the top-level redirect back from the IdP.
     response.set_cookie(
         OIDC_COOKIE,
         _encode_state(
@@ -247,7 +247,7 @@ def oidc_callback(
     return response
 
 
-# --- eigen account -----------------------------------------------------------------
+# --- own account -------------------------------------------------------------------
 
 
 def _local_user_id(user: Principal) -> int:
@@ -350,7 +350,7 @@ def revoke_token(request: Request, token_id: int, session: SessionDep, user: Use
     return redirect("/ui/account")
 
 
-# --- gebruikersbeheer (admin) --------------------------------------------------------
+# --- user management (admin) ---------------------------------------------------------
 
 
 def _user_form(

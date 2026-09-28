@@ -1,4 +1,4 @@
-"""CRUD-routers voor configuratie-objecten."""
+"""CRUD routers for configuration objects."""
 
 from collections.abc import Callable
 

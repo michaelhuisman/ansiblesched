@@ -1,5 +1,5 @@
-"""Fase 5a: retentie met metrics-archief, reaper, lock-verlies, proxy, scrape-token,
-known_hosts en versie in de static-URL's."""
+"""Phase 5a: retention with metrics archive, reaper, lock loss, proxy, scrape token,
+known_hosts and version in the static URLs."""
 
 import subprocess
 import time
@@ -77,13 +77,13 @@ def _count(model: Any, *where: Any) -> int:
 def test_retention_keeps_metrics_consistent(env: Env) -> None:
     template = env.template("ping.yml")
     name = template["name"]
-    # "Levende worker" voor de lopende run, anders zet de reaper hem tijdens de test op error.
+    # "Live worker" for the running run, otherwise the reaper sets it to error during the test.
     alive = connect_raw("worker:retention-test")
     recent = _insert_run(template["id"], "successful", age_days=1)
-    mid = _insert_run(template["id"], "successful", age_days=60)  # events weg, run blijft
+    mid = _insert_run(template["id"], "successful", age_days=60)  # events gone, run stays
     old_ok = _insert_run(template["id"], "successful", age_days=200, duration_s=3)
     old_failed = _insert_run(template["id"], "failed", age_days=200, duration_s=700)
-    stuck = _insert_run(template["id"], "running", age_days=300)  # nooit opruimen
+    stuck = _insert_run(template["id"], "running", age_days=300)  # never purge
     try:
         before = (
             metric("lamplighter_runs_total", template=name, status="successful"),
@@ -167,14 +167,14 @@ def test_reaper_errors_runs_of_lost_workers(env: Env) -> None:
     run = env.wait(int(run_id), timeout=30)  # type: ignore[arg-type]
     assert run["status"] == "error"
     assert run["status_reason"] == "worker lost"
-    # Net als andere fouten: een notificatie (eventueel al uitgesplitst en verstuurd).
+    # Like other errors: a notification (possibly already expanded and sent).
     assert _count(Notification, Notification.run_id == run_id) >= 1
 
 
 def test_reaper_leaves_live_workers_alone(env: Env) -> None:
     run_id = env.launch(env.template("sleep.yml", extra_vars={"sleep_s": 60}))["id"]
     env.wait(run_id, {"running"})
-    time.sleep(20)  # ruim meer dan grace (10s) + interval (5s) in dev
+    time.sleep(20)  # well over grace (10s) + interval (5s) in dev
     assert env.get_run(run_id)["status"] == "running"
     env.api.post(f"/runs/{run_id}/cancel")
     env.wait(run_id, timeout=30)
@@ -204,7 +204,7 @@ def test_lost_overlap_lock_aborts_run(env: Env) -> None:
         with get_engine().connect() as conn:
             conn.execute(text("SELECT pg_terminate_backend(:pid)"), {"pid": pid})
             conn.commit()
-        # De test pakt de lock vóórdat de worker hem terug kan nemen.
+        # The test grabs the lock before the worker can take it back.
         wait_for(
             lambda: locks.try_lock(thief, locks.NS_TEMPLATE, template["id"]),
             timeout=5,

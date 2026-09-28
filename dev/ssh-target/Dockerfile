@@ -1,4 +1,4 @@
-# Enig doel voor integratietests. Key-auth met de dev-key uit scripts/dev-keys.sh.
+# Only target for integration tests. Key auth with the dev key from scripts/dev-keys.sh.
 FROM docker.io/library/debian:bookworm-slim
 RUN apt-get update \
     && apt-get install -y --no-install-recommends openssh-server python3 \

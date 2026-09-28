@@ -34,7 +34,7 @@ def me(user: UserDep) -> MeOut:
     )
 
 
-# --- eigen API-tokens (alleen lokale gebruikers) ---------------------------------
+# --- own API tokens (local users only) --------------------------------------------
 
 
 def _local_user_id(user: UserDep) -> int:
@@ -65,7 +65,7 @@ def revoke_token(token_id: int, session: SessionDep, user: UserDep, actor: Actor
     api_tokens.revoke(session, token_id, user_id=_local_user_id(user), actor=actor)
 
 
-# --- gebruikersbeheer (admin) ----------------------------------------------------
+# --- user management (admin) -----------------------------------------------------
 
 
 @router.get("/users", response_model=list[UserOut], dependencies=ADMIN)

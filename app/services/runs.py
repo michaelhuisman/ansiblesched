@@ -1,4 +1,4 @@
-"""Runs starten, opvragen en annuleren (API-kant)."""
+"""Starting, fetching and canceling runs (API side)."""
 
 from collections.abc import Sequence
 from dataclasses import dataclass
@@ -18,7 +18,7 @@ def launch(
     template_id: int,
     *,
     triggered_by: str,
-    extra_vars: dict[str, Any] | None = None,  # vrije JSON van de gebruiker
+    extra_vars: dict[str, Any] | None = None,  # free-form JSON from the user
     limit: str | None = None,
     actor: audit.Actor | None = None,
 ) -> Run:
@@ -27,7 +27,7 @@ def launch(
         template_id=template.id,
         triggered_by=triggered_by,
         status=RunStatus.QUEUED,
-        # Handmatige runs wachten op een lopende run van hetzelfde template.
+        # Manual runs wait for a running run of the same template.
         overlap_policy="queue",
         extra_vars={**template.extra_vars, **(extra_vars or {})},
         limit=limit if limit is not None else template.limit,
@@ -85,8 +85,8 @@ def list_events(
 
 
 def cancel(session: Session, run_id: int, *, actor: audit.Actor | None = None) -> Run:
-    """Een queued run wordt direct geannuleerd; een lopende run krijgt een verzoek dat
-    de worker via zijn cancel_callback oppikt."""
+    """A queued run is canceled immediately; a running run gets a request that the worker
+    picks up via its cancel_callback."""
     run = session.scalars(select(Run).where(Run.id == run_id).with_for_update()).one_or_none()
     if run is None:
         raise NotFoundError(f"runs {run_id} not found")

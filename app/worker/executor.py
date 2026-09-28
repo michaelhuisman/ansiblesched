@@ -1,4 +1,4 @@
-"""Uitvoering van één geclaimde run met ansible-runner."""
+"""Execution of one claimed run with ansible-runner."""
 
 import logging
 import shlex
@@ -28,17 +28,17 @@ from app.worker.git import GitError, RepoCache
 log = logging.getLogger(__name__)
 
 EVENT_BATCH_SIZE = 50
-# Melding van ssh-add (via ansible-runner): bevat het interne pad en de key-comment.
+# Message from ssh-add (via ansible-runner): contains the internal path and the key comment.
 _SSH_AGENT_NOISE = "Identity added: "
 EVENT_FLUSH_INTERVAL_S = 1.0
 CANCEL_CHECK_INTERVAL_S = 1.0
 LOCK_CHECK_INTERVAL_S = 5.0
 LOCK_LOST_REASON = "overlap lock lost"
 
-# Controleert of de overlap-lock van de run nog van deze worker is.
+# Checks whether the run's overlap lock still belongs to this worker.
 LockGuard = Callable[[], bool]
 
-# ansible_runner.run(**kwargs) -> Runner; ongetypeerde library.
+# ansible_runner.run(**kwargs) -> Runner; untyped library.
 RunnerFn = Callable[..., Any]
 
 _RUNNER_STATUS = {
@@ -63,7 +63,7 @@ class RunSpec:
     inventory_source: str
     inventory_path: str | None
     inventory_content: str | None
-    extra_vars: dict[str, Any]  # vrije JSON
+    extra_vars: dict[str, Any]  # free-form JSON
     limit: str | None
     tags: str | None
     skip_tags: str | None
@@ -134,7 +134,7 @@ def load_spec(session: Session, run_id: int) -> RunSpec:
 
 
 def _inside(base: Path, relative: str) -> Path:
-    """Los een relatief pad op binnen `base`; weiger absolute paden en '..'."""
+    """Resolve a relative path within `base`; reject absolute paths and '..'."""
     rel = PurePosixPath(relative)
     if rel.is_absolute() or ".." in rel.parts:
         raise RunSetupError(f"path must be relative without '..': {relative!r}")
@@ -142,7 +142,7 @@ def _inside(base: Path, relative: str) -> Path:
 
 
 class EventSink:
-    """Filtert events en schrijft ze batchgewijs weg."""
+    """Filters events and writes them in batches."""
 
     def __init__(self, sm: sessionmaker[Session], run_id: int, masker: SecretMasker) -> None:
         self._sm = sm
@@ -150,7 +150,7 @@ class EventSink:
         self._masker = masker
         self._buffer: list[dict[str, Any]] = []
         self._last_flush = time.monotonic()
-        # ansible-runner leest stats van disk, maar we schrijven events niet weg.
+        # ansible-runner reads stats from disk, but we don't write events there.
         self.stats: dict[str, Any] | None = None
 
     def handle(self, raw: Mapping[str, Any]) -> bool:
@@ -170,9 +170,9 @@ class EventSink:
             try:
                 self.flush()
             except Exception:
-                # Buffer blijft staan; volgende flush probeert het opnieuw.
+                # The buffer stays; the next flush retries.
                 log.warning("event flush failed, will retry", exc_info=True)
-        # False: ansible-runner schrijft het (ongefilterde) event niet naar disk.
+        # False: ansible-runner does not write the (unfiltered) event to disk.
         return False
 
     def flush(self) -> None:
@@ -184,8 +184,8 @@ class EventSink:
 
 
 class CancelCheck:
-    """ansible-runner's cancel_callback: annuleren op verzoek, of als de overlap-lock
-    definitief kwijt is (dan kan een andere run van hetzelfde template al lopen)."""
+    """ansible-runner's cancel_callback: cancel on request, or if the overlap lock is lost
+    for good (another run of the same template may already be running)."""
 
     def __init__(
         self, sm: sessionmaker[Session], run_id: int, lock_guard: LockGuard | None = None
@@ -315,7 +315,7 @@ class Executor:
                 auth_dir=run_dir / "git-auth",
             )
         except GitError as exc:
-            # git-uitvoer kan in theorie de token bevatten; maskeren vóór opslag.
+            # git output could in theory contain the token; mask before storing.
             raise GitError(SecretMasker(secrets).mask(str(exc))) from None
         with self._sm() as session:
             queue.set_commit(session, spec.run_id, sha)
@@ -345,9 +345,9 @@ class Executor:
         envvars = {
             "ANSIBLE_HOST_KEY_CHECKING": str(self._settings.ansible_host_key_checking),
             "ANSIBLE_RETRY_FILES_ENABLED": "False",
-            # Eigen ControlPath per run: SSH-masterverbindingen (ControlPersist) worden nooit
-            # gedeeld tussen runs. Anders zou een run een verbinding hergebruiken die een
-            # andere run zonder (of met een andere) host key-controle heeft opgezet.
+            # Own ControlPath per run: SSH master connections (ControlPersist) are never shared
+            # between runs. Otherwise a run could reuse a connection that another run set up
+            # without (or with a different) host key check.
             "ANSIBLE_SSH_CONTROL_PATH_DIR": str(run_dir / "cp"),
         }
         envvars.update(self._host_key_env(spec, run_dir))
@@ -380,9 +380,9 @@ class Executor:
         return status, rc, sink.stats
 
     def _host_key_env(self, spec: RunSpec, run_dir: Path) -> dict[str, str]:
-        """Host key checking: een known_hosts-credential op het template dwingt strikte
-        checking af, los van de globale instelling. Zonder known_hosts geldt de globale
-        instelling; staat die aan, dan weigeren we de run meteen met een duidelijke reden."""
+        """Host key checking: a known_hosts credential on the template enforces strict
+        checking, regardless of the global setting. Without known_hosts the global
+        setting applies; if that is on, we refuse the run right away with a clear reason."""
         if spec.known_hosts_credential is None:
             if self._settings.ansible_host_key_checking:
                 raise RunSetupError(

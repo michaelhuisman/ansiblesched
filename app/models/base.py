@@ -5,7 +5,7 @@ from sqlalchemy import BigInteger, DateTime, Identity, MetaData, func
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
-# JSON-kolommen bevatten willekeurige, door gebruikers of Ansible aangeleverde structuren.
+# JSON columns hold arbitrary structures supplied by users or Ansible.
 JsonDict = dict[str, Any]
 
 NAMING_CONVENTION = {

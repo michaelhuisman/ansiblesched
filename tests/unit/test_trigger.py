@@ -73,7 +73,7 @@ def test_fall_back_hour_step_counts_as_interval() -> None:
 def test_spring_forward_fixed_hour_fires_once_after_jump() -> None:
     fires = fires_between(build_trigger("30 2 * * *", "Europe/Amsterdam"), *local_day(2026, 3, 29))
     assert len(fires) == 1
-    # 02:30 bestaat niet; hij vuurt direct na de sprong (01:30 UTC = 03:30 CEST).
+    # 02:30 does not exist; it fires right after the jump (01:30 UTC = 03:30 CEST).
     assert fires[0].astimezone(UTC) == datetime(2026, 3, 29, 1, 30, tzinfo=UTC)
 
 
@@ -89,7 +89,7 @@ def test_normal_day_fixed_hour() -> None:
 
 def test_trigger_survives_pickle() -> None:
     trigger = build_trigger("30 2 * * *", "Europe/Amsterdam")
-    clone = pickle.loads(pickle.dumps(trigger))  # noqa: S301 - eigen data, zoals de jobstore
+    clone = pickle.loads(pickle.dumps(trigger))  # noqa: S301 - our own data, like the jobstore
     assert isinstance(clone, DstSafeCronTrigger)
     assert len(fires_between(clone, *local_day(2026, 10, 25))) == 1
 
@@ -113,7 +113,7 @@ def test_latest_fire_time_none_within_lookback() -> None:
 
 def test_latest_fire_time_respects_dst_rule() -> None:
     trigger = build_trigger("30 2 * * *", "Europe/Amsterdam")
-    # Tijdens de tweede 02:30 (CET): de laatste geldige afvuring is die van een uur eerder.
+    # During the second 02:30 (CET): the last valid firing is the one an hour earlier.
     now = datetime(2026, 10, 25, 1, 30, 5, tzinfo=UTC)
     assert latest_fire_time(trigger, now, timedelta(hours=2)) == datetime(
         2026, 10, 25, 0, 30, tzinfo=UTC

@@ -1,4 +1,4 @@
-# Test voor event-filtering: `nolog_secret` mag nergens in run_events terechtkomen.
+# Test for event filtering: `nolog_secret` must never end up in run_events.
 - name: No-log handling
   hosts: all
   gather_facts: false

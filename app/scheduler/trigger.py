@@ -1,22 +1,22 @@
-"""Cron-triggers met Vixie-cron-semantiek rond DST.
+"""Cron triggers with Vixie cron semantics around DST.
 
-APScheduler's CronTrigger vuurt een job op een vast uur (bv. `30 2 * * *`) twee keer
-als de klok in de herfst teruggaat. Vixie cron doet dat één keer:
+APScheduler's CronTrigger fires a job at a fixed hour (e.g. `30 2 * * *`) twice when
+the clock goes back in autumn. Vixie cron does it once:
 
-- uurveld met wildcard of stap (`*`, `*/2`): gewoon elk uur, dus in het dubbele uur
-  twee keer (er verstrijkt echt een uur);
-- vast uurveld: de tweede keer dezelfde wandkloktijd wordt overgeslagen.
+- hour field with wildcard or step (`*`, `*/2`): simply every hour, so twice in the
+  repeated hour (a real hour passes);
+- fixed hour field: the second occurrence of the same wall-clock time is skipped.
 
-Een niet-bestaande tijd in het voorjaar (02:30 op de omschakeldag) vuurt direct na de
-sprong, zoals APScheduler al doet.
+A non-existent time in spring (02:30 on the transition day) fires right after the
+jump, as APScheduler already does.
 
-Verder wijkt APScheduler's `from_crontab` af van cron:
-- weekdagen zijn daar 0 = maandag; wij vertalen het veld naar namen met cron-nummering
-  (0 en 7 = zondag);
-- dag-van-de-maand en weekdag worden met EN gecombineerd i.p.v. OF; die combinatie
-  weigeren we.
+APScheduler's `from_crontab` also differs from cron:
+- weekdays there are 0 = Monday; we translate the field to names with cron numbering
+  (0 and 7 = Sunday);
+- day of month and day of week are combined with AND instead of OR; we reject that
+  combination.
 
-Let op: deze klasse wordt gepickled in de jobstore; module en naam niet verplaatsen.
+Note: this class is pickled in the jobstore; do not move the module or rename it.
 """
 
 from datetime import UTC, datetime, timedelta
@@ -30,9 +30,9 @@ class InvalidScheduleError(ValueError):
 
 
 def _is_repeated_wall_time(moment: datetime) -> bool:
-    """True als dit de tweede keer is dat deze wandkloktijd voorkomt (herfst-DST)."""
+    """True if this is the second occurrence of this wall-clock time (autumn DST)."""
     first = moment.replace(fold=0)
-    # In UTC vergelijken: binnen dezelfde tzinfo negeert Python fold bij vergelijken.
+    # Compare in UTC: within the same tzinfo Python ignores fold when comparing.
     return first.utcoffset() != moment.utcoffset() and first.astimezone(UTC) < moment.astimezone(
         UTC
     )
@@ -67,7 +67,7 @@ def _dow_value(token: str) -> int:
 
 
 def normalize_day_of_week(field: str) -> str:
-    """Vertaal een cron-weekdagveld (0/7 = zondag) naar APScheduler-namen."""
+    """Translate a cron weekday field (0/7 = Sunday) to APScheduler names."""
     if field == "*":
         return "*"
     days: set[int] = set()
@@ -122,17 +122,17 @@ def build_trigger(cron: str, timezone: str) -> DstSafeCronTrigger:
 
 
 def next_fire_time(trigger: CronTrigger, now: datetime) -> datetime | None:
-    """Volgende afvuring, in UTC."""
+    """Next fire time, in UTC."""
     result: datetime | None = trigger.get_next_fire_time(None, now)
     return result.astimezone(UTC) if result is not None else None
 
 
 def latest_fire_time(trigger: CronTrigger, now: datetime, lookback: timedelta) -> datetime | None:
-    """Het laatste fire-moment <= now, binnen `lookback`.
+    """The last fire time <= now, within `lookback`.
 
-    Deterministisch uit de trigger afgeleid, zodat twee schedulers voor dezelfde
-    afvuring hetzelfde `scheduled_for` bepalen. Geeft UTC terug: `==` tussen
-    tijdzones is altijd False bij een dubbelzinnige wandkloktijd (PEP 495).
+    Derived deterministically from the trigger, so two schedulers determine the same
+    `scheduled_for` for the same firing. Returns UTC: `==` across time zones is always
+    False for an ambiguous wall-clock time (PEP 495).
     """
     latest: datetime | None = None
     candidate: datetime | None = trigger.get_next_fire_time(None, now - lookback)

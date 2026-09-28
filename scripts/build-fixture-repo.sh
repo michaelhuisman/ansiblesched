@@ -1,6 +1,6 @@
 #!/usr/bin/env sh
-# Bouwt een bare git-repo uit een map met playbooks (dev/tests).
-#   build-fixture-repo.sh <bronmap> <doel.git>
+# Builds a bare git repo from a directory of playbooks (dev/tests).
+#   build-fixture-repo.sh <source-dir> <target.git>
 set -eu
 src=$1
 dest=$2

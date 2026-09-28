@@ -1,5 +1,5 @@
 class ServiceError(Exception):
-    """Basis voor fouten die de API naar een HTTP-status vertaalt."""
+    """Base for errors that the API translates to an HTTP status."""
 
 
 class NotFoundError(ServiceError):
@@ -7,8 +7,8 @@ class NotFoundError(ServiceError):
 
 
 class ConflictError(ServiceError):
-    """Botsing met bestaande state: unieke naam, object in gebruik, ongeldige statusovergang."""
+    """Conflict with existing state: unique name, object in use, invalid status transition."""
 
 
 class InvalidReferenceError(ServiceError):
-    """Een foreign key verwijst naar een object dat niet bestaat."""
+    """A foreign key refers to an object that does not exist."""

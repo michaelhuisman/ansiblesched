@@ -9,10 +9,10 @@ log = logging.getLogger(__name__)
 
 
 class PgTemplateLocker:
-    """Overlap-locks per template op een eigen connectie.
+    """Overlap locks per template on a dedicated connection.
 
-    Een sessie-lock blijft de hele run staan (die beslaat meerdere transacties). Valt de
-    connectie weg, bijvoorbeeld bij een crash, dan geeft Postgres de lock vrij.
+    A session lock is held for the whole run (which spans several transactions). If the
+    connection drops, for example in a crash, Postgres releases the lock.
     """
 
     def __init__(self, worker_id: str) -> None:
@@ -31,8 +31,8 @@ class PgTemplateLocker:
         locks.unlock(self._connection(), locks.NS_TEMPLATE, template_id)
 
     def ensure(self, template_id: int) -> bool:
-        """Is de template-lock nog van ons? Bij een verbroken verbinding: opnieuw verbinden
-        en de lock opnieuw nemen. False als een andere run hem inmiddels heeft."""
+        """Is the template lock still ours? On a broken connection: reconnect and take the
+        lock again. False if another run has it by now."""
         try:
             self._connection().execute("SELECT 1")
             return True
@@ -42,12 +42,12 @@ class PgTemplateLocker:
         try:
             return self.try_lock(template_id)
         except psycopg.Error:
-            # Database onbereikbaar: dan kan ook niemand anders claimen. Run laten lopen.
+            # Database unreachable: then nobody else can claim either. Let the run continue.
             log.warning("cannot re-acquire template lock, database unavailable")
             return True
 
     def reset(self) -> None:
-        """Na een fout: connectie weggooien. Daarmee vervallen ook alle locks."""
+        """After an error: discard the connection. That also releases all locks."""
         if self._conn is not None:
             try:
                 self._conn.close()

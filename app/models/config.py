@@ -15,7 +15,7 @@ def _in(column: str, values: tuple[str, ...]) -> str:
 
 
 class Credential(Entity):
-    """Alleen een referentie naar een secret, nooit de waarde zelf."""
+    """Only a reference to a secret, never the value itself."""
 
     __tablename__ = "credentials"
     __table_args__ = (CheckConstraint(_in("type", CREDENTIAL_TYPES), name="type"),)
@@ -72,7 +72,7 @@ class Template(TimestampMixin, Entity):
     verbosity: Mapped[int] = mapped_column(server_default="0")
     machine_credential_id: Mapped[int] = mapped_column(ForeignKey("credentials.id"))
     vault_credential_id: Mapped[int | None] = mapped_column(ForeignKey("credentials.id"))
-    # Gezet: strikte host key checking met deze known_hosts, los van de globale instelling.
+    # Set: strict host key checking with these known_hosts, regardless of the global setting.
     known_hosts_credential_id: Mapped[int | None] = mapped_column(ForeignKey("credentials.id"))
     timeout_s: Mapped[int | None]
 

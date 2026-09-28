@@ -30,13 +30,13 @@ def _resolver() -> CredentialResolver:
 
 
 def recover(settings: Settings, sm: sessionmaker[Session], repos: RepoCache) -> None:
-    """Opruimen na een crash of harde stop van een vorige worker-instantie."""
+    """Clean up after a crash or hard stop of a previous worker instance."""
     with sm() as session:
         orphaned = queue.fail_orphaned(session, settings.worker_id)
     if orphaned:
         log.warning("marked orphaned runs as error", extra={"run_ids": orphaned})
 
-    # De runtime-dir kan gedeeld zijn met andere workers: laat hun lopende runs staan.
+    # The runtime dir may be shared with other workers: leave their running runs alone.
     dirs = {int(p.name): p for p in settings.runtime_dir.iterdir() if p.name.isdigit()}
     with sm() as session:
         keep = queue.active_elsewhere(session, list(dirs), settings.worker_id)

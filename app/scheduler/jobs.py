@@ -1,5 +1,5 @@
-"""Functies die APScheduler aanroept. Worden per referentie gepickled in de jobstore:
-module en namen niet verplaatsen."""
+"""Functions APScheduler calls. They are pickled by reference in the jobstore:
+do not move the module or rename them."""
 
 import logging
 import time
@@ -37,7 +37,7 @@ def enqueue_schedule(schedule_id: int) -> None:
     with sm() as session:
         schedule = schedules.load(session, schedule_id)
         if schedule is None or not schedule.enabled:
-            # Race met de reconcile; die haalt de job straks weg.
+            # Race with the reconcile, which will remove the job shortly.
             return
         now = datetime.now(UTC)
         trigger = build_trigger(schedule.cron, schedule.timezone)
@@ -85,16 +85,16 @@ NOTIFICATIONS_INTERVAL_S = 5
 
 
 class _WebhookConfigCache:
-    """Webhook-config uit OpenBao, `webhook_cache_s` seconden gecachet. Een rotatie in
-    OpenBao is zo zonder herstart actief."""
+    """Webhook config from OpenBao, cached for `webhook_cache_s` seconds. A rotation in
+    OpenBao thus takes effect without a restart."""
 
     def __init__(self) -> None:
         self._value: notifications.WebhookConfig | None = None
         self._loaded_at = 0.0
 
     def get(self) -> notifications.WebhookConfig | None:
-        """None als OpenBao (tijdelijk) niet te lezen is: dan niets versturen of
-        uitsplitsen, zodat er geen notificatie verloren gaat."""
+        """None if OpenBao is (temporarily) unreadable: then send and expand nothing, so
+        no notification gets lost."""
         settings = get_settings()
         if not settings.webhook_openbao_path:
             return notifications.WebhookConfig(urls=())
@@ -151,8 +151,8 @@ REAPER_JOB_ID = "internal:reaper"
 
 
 def run_retention() -> None:
-    """Dagelijks. Met een eigen advisory lock: nooit twee tegelijk, ook niet als het
-    leiderschap tijdens de run wisselt."""
+    """Daily. With its own advisory lock: never two at once, not even if leadership
+    changes during the run."""
     settings = get_settings()
     with connect_raw("scheduler:retention") as conn:
         if not locks.try_lock(conn, locks.NS_SCHEDULER, locks.MAINTENANCE_ID):

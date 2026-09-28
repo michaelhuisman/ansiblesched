@@ -1,4 +1,4 @@
-"""Fase 3: SSE-stream, metrics, webhooks en de UI."""
+"""Phase 3: SSE stream, metrics, webhooks and the UI."""
 
 import hashlib
 import hmac
@@ -70,7 +70,7 @@ def test_stream_follows_running_run(env: Env) -> None:
     stdout = "".join(d["stdout"] for d, _ in run_events)
     assert "PLAY RECAP" in stdout
     assert "Identity added" not in stdout
-    # Dezelfde events als via de gewone events-API.
+    # The same events as via the regular events API.
     assert seqs == [e["seq"] for e in env.events(run_id)]
 
 
@@ -183,7 +183,7 @@ def test_webhook_on_failed_run(env: Env) -> None:
     assert note is not None
     assert note.status == "sent"
     assert note.attempts == 1
-    # Geen URL in de database, alleen de fingerprint.
+    # No URL in the database, only the fingerprint.
     assert "webhook-sink" not in note.target
 
 
@@ -303,7 +303,7 @@ def test_ui_schedule_create_toggle_delete(ui: httpx.Client, env: Env) -> None:
     )
     assert ok.status_code == 303
     sched = next(s for s in env.api.get("/schedules").json() if s["template_id"] == template["id"])
-    assert sched["enabled"] is False  # checkbox niet aangevinkt
+    assert sched["enabled"] is False  # checkbox not ticked
 
     row = ui.post(f"/schedules/{sched['id']}/toggle")
     assert row.status_code == 200

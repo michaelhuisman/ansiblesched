@@ -70,7 +70,7 @@ def test_cancel_running(env: Env) -> None:
     template = env.template("sleep.yml", extra_vars={"sleep_s": 60})
     run_id = env.launch(template)["id"]
     env.wait(run_id, {"running"})
-    # Wachten tot ansible echt loopt (eerste task gestart).
+    # Wait until ansible is really running (first task started).
     for _ in range(40):
         if any(e["event"] == "playbook_on_task_start" for e in env.events(run_id)):
             break
@@ -84,7 +84,7 @@ def test_cancel_running(env: Env) -> None:
     assert run["cancel_requested_at"]
     _assert_cleaned_up(run_id)
 
-    # Een afgeronde run kan niet nogmaals geannuleerd worden.
+    # A finished run cannot be canceled again.
     assert env.api.post(f"/runs/{run_id}/cancel").status_code == 409
 
 
@@ -103,7 +103,7 @@ def test_setup_error_cleans_up(env: Env) -> None:
 
     assert run["status"] == "error", run
     assert f"credential {broken['id']}" in run["status_reason"]
-    # De checkout gebeurde al; de dir bestond dus en moet weg zijn.
+    # The checkout already happened; so the dir existed and must be gone.
     assert run["commit_sha"] == fixture_head()
     _assert_cleaned_up(run["id"])
 
@@ -121,5 +121,5 @@ def test_secrets_never_in_events(env: Env) -> None:
     for line in ssh_key.splitlines():
         if len(line.strip()) >= 6 and "-----" not in line:
             assert line.strip() not in dumped
-    # De no_log-task is zichtbaar, maar zonder inhoud.
+    # The no_log task is visible, but without content.
     assert any("censored" in json.dumps(e["data"]) for e in events)

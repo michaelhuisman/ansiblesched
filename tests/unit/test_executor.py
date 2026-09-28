@@ -1,4 +1,4 @@
-"""Executor-tests zonder database en zonder echte ansible-runner."""
+"""Executor tests without a database and without a real ansible-runner."""
 
 from collections.abc import Iterator, Mapping
 from contextlib import contextmanager
@@ -139,7 +139,7 @@ def test_successful_run(env: SimpleNamespace) -> None:
 
     def fake_runner(**kwargs: Any) -> SimpleNamespace:
         seen.update(kwargs)
-        # Tijdens de run bestaat de private data dir.
+        # The private data dir exists during the run.
         assert Path(kwargs["private_data_dir"]).is_dir()
         assert Path(kwargs["inventory"]).read_text() == "host1\n"
         kwargs["event_handler"](
@@ -167,7 +167,7 @@ def test_successful_run(env: SimpleNamespace) -> None:
     assert seen["extravars"] == {"a": 1}
     assert seen["timeout"] == 30
     assert seen["cmdline"] is None
-    # Eigen SSH ControlPath per run: geen gedeelde masterverbindingen tussen runs.
+    # Own SSH ControlPath per run: no shared master connections between runs.
     assert seen["envvars"]["ANSIBLE_SSH_CONTROL_PATH_DIR"] == str(env.runtime / "5" / "cp")
     assert not (env.runtime / "5").exists()
     assert env.repos.pruned == [1]

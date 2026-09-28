@@ -1,4 +1,4 @@
-"""Server-Sent Events voor een run: events en statuswijzigingen, tot de run klaar is."""
+"""Server-Sent Events for a run: events and status changes, until the run is done."""
 
 import json
 import time
@@ -13,7 +13,7 @@ from app.services import runs
 
 POLL_INTERVAL_S = 0.5
 KEEPALIVE_S = 15.0
-# Daarna sluit de server de stream; de browser verbindt opnieuw met Last-Event-ID.
+# After that the server closes the stream; the browser reconnects with Last-Event-ID.
 MAX_STREAM_S = 3600.0
 BATCH = 500
 
@@ -22,7 +22,7 @@ def sse(event: str, data: dict[str, Any], event_id: int | None = None) -> str:
     lines = [f"event: {event}"]
     if event_id is not None:
         lines.append(f"id: {event_id}")
-    # json.dumps geeft één regel; SSE-data mag geen kale newlines bevatten.
+    # json.dumps produces a single line; SSE data must not contain bare newlines.
     lines.append(f"data: {json.dumps(data, default=str)}")
     return "\n".join(lines) + "\n\n"
 
@@ -36,11 +36,11 @@ class Clock:
 def run_stream(
     sm: sessionmaker[Session], run_id: int, after_seq: int = 0, clock: Clock | None = None
 ) -> Iterator[str]:
-    """Yield SSE-berichten voor `run_id` vanaf `after_seq`.
+    """Yield SSE messages for `run_id` starting after `after_seq`.
 
-    Volgorde per ronde: eerst de status, dan de events. Een run is pas echt klaar als
-    de status al final was vóórdat we een lege batch lazen; de worker schrijft alle
-    events weg voordat hij de status afrondt.
+    Order per round: first the status, then the events. A run is only really done if
+    the status was already final before we read an empty batch; the worker writes all
+    events before it finalises the status.
     """
     clock = clock or Clock()
     started = last_output = clock.now()

@@ -1,5 +1,5 @@
-// Live log van een run via SSE (/api/v1/runs/<id>/stream).
-// EventSource verbindt zelf opnieuw en stuurt dan Last-Event-ID mee.
+// Live log of a run via SSE (/api/v1/runs/<id>/stream).
+// EventSource reconnects by itself and then sends Last-Event-ID.
 (function () {
   "use strict";
   const log = document.getElementById("log");
@@ -8,7 +8,7 @@
   const follow = document.getElementById("follow");
   const runId = log.dataset.runId;
 
-  // runner_on_* voor gewone tasks, runner_item_on_* voor loop-items.
+  // runner_on_* for regular tasks, runner_item_on_* for loop items.
   const classFor = (ev) => {
     const kind = ev.event.replace(/^runner_(item_)?on_/, "");
     if (kind === "failed" || kind === "unreachable") return "ev-failed";
@@ -21,7 +21,7 @@
     const nearBottom = log.scrollHeight - log.scrollTop - log.clientHeight < 40;
     const span = document.createElement("span");
     if (cls) span.className = cls;
-    span.textContent = text.endsWith("\n") ? text : text + "\n";  // textContent: geen HTML-injectie
+    span.textContent = text.endsWith("\n") ? text : text + "\n";  // textContent: no HTML injection
     log.appendChild(span);
     if (follow.checked && nearBottom) log.scrollTop = log.scrollHeight;
   };

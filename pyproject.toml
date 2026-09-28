@@ -11,8 +11,8 @@ extend-exclude = ["tests/fixtures"]
 [tool.ruff.lint]
 select = ["E", "F", "W", "I", "B", "UP", "S", "SIM", "RUF", "PT", "DTZ", "T20"]
 ignore = [
-    "S603", # subprocess zonder shell is hier de bedoeling (git)
-    "S607", # git wordt via PATH gevonden
+    "S603", # subprocess without a shell is intended here (git)
+    "S607", # git is found via PATH
 ]
 
 [tool.ruff.lint.per-file-ignores]
@@ -29,13 +29,13 @@ module = ["ansible_runner", "ansible_runner.*", "apscheduler", "apscheduler.*", 
 ignore_missing_imports = true
 
 [[tool.mypy.overrides]]
-# DstSafeCronTrigger subclasst het ongetypeerde CronTrigger.
+# DstSafeCronTrigger subclasses the untyped CronTrigger.
 module = ["app.scheduler.trigger"]
 disallow_subclassing_any = false
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 markers = [
-    "integration: vereist draaiende compose.dev.yml",
-    "slow: wacht op echte cron-afvuringen (minuten); overslaan met -m \"not slow\"",
+    "integration: requires a running compose.dev.yml",
+    "slow: waits for real cron firings (minutes); skip with -m \"not slow\"",
 ]

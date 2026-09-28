@@ -1,8 +1,8 @@
-"""Tabel van APScheduler's SQLAlchemyJobStore.
+"""Table of APScheduler's SQLAlchemyJobStore.
 
-Gedefinieerd in onze metadata zodat Alembic hem beheert. De jobstore maakt hem zelf
-alleen aan als hij nog niet bestaat (checkfirst), dus dit is dan een no-op. De definitie
-moet gelijk blijven aan apscheduler.jobstores.sqlalchemy.
+Defined in our metadata so Alembic manages it. The jobstore only creates it itself if it
+does not exist yet (checkfirst), so that is a no-op here. The definition must stay equal
+to apscheduler.jobstores.sqlalchemy.
 """
 
 from sqlalchemy import Column, Float, LargeBinary, Table, Unicode

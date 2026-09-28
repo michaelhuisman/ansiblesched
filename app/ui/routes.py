@@ -1,7 +1,7 @@
-"""Server-rendered UI (Jinja2 + htmx) onder /ui.
+"""Server-rendered UI (Jinja2 + htmx) under /ui.
 
-Dun zoals de API-routers: businesslogica in app/services, validatie via dezelfde
-pydantic-schema's als de API.
+Thin like the API routers: business logic in app/services, validation via the same
+pydantic schemas as the API.
 """
 
 import html
@@ -58,7 +58,7 @@ def runs_page(
     rows = runs.list_runs(session, runs.RunFilter(template_id=tid, status=st, limit=100))
     names = {t.id: t.name for t in crud.list_all(session, Template)}
     ctx: dict[str, Any] = {"runs": rows, "template_names": names, "template_id": tid, "status": st}
-    # htmx ververst alleen de tabel.
+    # htmx only refreshes the table.
     partial = request.headers.get("HX-Request") == "true"
     return render(request, "_runs_table.html" if partial else "runs.html", user, **ctx)
 

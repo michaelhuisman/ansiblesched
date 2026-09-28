@@ -1,16 +1,16 @@
 #!/usr/bin/env sh
-# Genereert dev-secrets in .dev/ (staat in .gitignore). Bestaande waarden blijven staan.
-#   .dev/secrets/ssh-target/id_ed25519   SSH-key voor de ssh-target container
-#   .dev/secrets/vault/password          vault-wachtwoord voor tests
-#   .dev/secrets/keycloak/*              client-secret, admin- en testwachtwoorden
-#   .dev/secrets/oidc.env                LAMPLIGHTER_OIDC_CLIENT_SECRET voor de api
-#   .dev/secrets/keycloak.env            bootstrap-admin voor de Keycloak-console
-#   .dev/keycloak/realm-lamplighter.json   realm-import, gerenderd uit dev/keycloak/*.tpl
-#   .dev/secrets/openbao/*               root-token (alleen init + tests), AppRole-id's
-#   .dev/secrets/git/token               token voor de git-http-server
-#   .dev/secrets/webhook/hmac            HMAC-secret voor webhooks
-#   .dev/secrets/metrics.env             LAMPLIGHTER_METRICS_TOKEN voor /metrics
-#   .dev/secrets/ssh-target/host_*       vaste host key van ssh-target + known_hosts
+# Generates dev secrets in .dev/ (listed in .gitignore). Existing values are kept.
+#   .dev/secrets/ssh-target/id_ed25519   SSH key for the ssh-target container
+#   .dev/secrets/vault/password          vault password for tests
+#   .dev/secrets/keycloak/*              client secret, admin and test passwords
+#   .dev/secrets/oidc.env                LAMPLIGHTER_OIDC_CLIENT_SECRET for the api
+#   .dev/secrets/keycloak.env            bootstrap admin for the Keycloak console
+#   .dev/keycloak/realm-lamplighter.json   realm import, rendered from dev/keycloak/*.tpl
+#   .dev/secrets/openbao/*               root token (init + tests only), AppRole ids
+#   .dev/secrets/git/token               token for the git-http server
+#   .dev/secrets/webhook/hmac            HMAC secret for webhooks
+#   .dev/secrets/metrics.env             LAMPLIGHTER_METRICS_TOKEN for /metrics
+#   .dev/secrets/ssh-target/host_*       fixed host key of ssh-target + known_hosts
 set -eu
 cd "$(dirname "$0")/.."
 dir=.dev/secrets
@@ -18,7 +18,7 @@ mkdir -p "$dir/ssh-target" "$dir/vault" "$dir/keycloak" "$dir/openbao" "$dir/git
     "$dir/webhook" .dev/keycloak
 
 rand() { LC_ALL=C tr -dc 'A-Za-z0-9' </dev/urandom | head -c "${1:-32}"; }
-secret() {  # secret <bestand>: aanmaken als hij nog niet bestaat, dan uitlezen
+secret() {  # secret <file>: create it if it does not exist yet, then read it
     [ -f "$1" ] || rand 32 >"$1"
     cat "$1"
 }
@@ -26,7 +26,7 @@ secret() {  # secret <bestand>: aanmaken als hij nog niet bestaat, dan uitlezen
 if [ ! -f "$dir/ssh-target/id_ed25519" ]; then
     ssh-keygen -q -t ed25519 -N "" -C "lamplighter-dev" -f "$dir/ssh-target/id_ed25519"
 fi
-# Vaste host key voor ssh-target en de bijbehorende known_hosts-regel.
+# Fixed host key for ssh-target and the matching known_hosts line.
 if [ ! -f "$dir/ssh-target/host_ed25519_key" ]; then
     ssh-keygen -q -t ed25519 -N "" -C "ssh-target" -f "$dir/ssh-target/host_ed25519_key"
 fi
@@ -64,6 +64,6 @@ printf 'LAMPLIGHTER_OPENBAO_ROLE_ID=%s\nLAMPLIGHTER_OPENBAO_SECRET_ID=%s\n' "$wo
 printf 'LAMPLIGHTER_OPENBAO_ROLE_ID=%s\nLAMPLIGHTER_OPENBAO_SECRET_ID=%s\n' "$sched_role" "$sched_secret" \
     >"$dir/openbao/scheduler.env"
 
-# De containers draaien onder andere uid's; dit zijn uitsluitend dev-secrets.
+# The containers run under other uids; these are dev secrets only.
 chmod -R a+rX .dev
 echo "dev secrets in $dir"

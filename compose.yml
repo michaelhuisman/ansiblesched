@@ -1,11 +1,11 @@
-# Productie (minimaal; wordt in fase 5 afgemaakt). Vereist in .env:
+# Production (minimal; completed in phase 5). Requires in .env:
 #   LAMPLIGHTER_IMAGE, POSTGRES_PASSWORD, LAMPLIGHTER_PUBLIC_URL, LAMPLIGHTER_OPENBAO_ADDR
-# Per rol een eigen AppRole via een env-bestand (niet in git):
+# One AppRole per role via an env file (not in git):
 #   secrets/worker.env     LAMPLIGHTER_OPENBAO_ROLE_ID, LAMPLIGHTER_OPENBAO_SECRET_ID (lamplighter-worker)
 #   secrets/scheduler.env  LAMPLIGHTER_OPENBAO_ROLE_ID, LAMPLIGHTER_OPENBAO_SECRET_ID (lamplighter-scheduler)
-# OpenBao zelf draait extern. Policies: zie docs/plan.md (Fase 4b).
+# OpenBao itself runs externally. Policies: see docs/plan.md (Phase 4b).
 
-name: lamplighter # containers en volumes: lamplighter-<service>, lamplighter_<volume>
+name: lamplighter # containers and volumes: lamplighter-<service>, lamplighter_<volume>
 
 x-app: &app
   image: ${LAMPLIGHTER_IMAGE:?set LAMPLIGHTER_IMAGE}
@@ -21,7 +21,7 @@ x-app: &app
 services:
   postgres:
     image: docker.io/library/postgres:18.6
-    # Een bevroren (niet gecrashte) leider verliest zijn advisory lock binnen ~15s.
+    # A frozen (not crashed) leader loses its advisory lock within ~15s.
     command:
       - postgres
       - -c

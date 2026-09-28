@@ -39,7 +39,7 @@ class Run(Entity):
         Index("ix_runs_status_created_at", "status", "created_at"),
         Index("ix_runs_template_id_created_at", "template_id", "created_at"),
         CheckConstraint("overlap_policy IN ('skip', 'queue')", name="overlap_policy"),
-        # Vangrail tegen dubbele runs als twee schedulers kort allebei leider denken te zijn.
+        # Guard against duplicate runs if two schedulers briefly both think they are leader.
         Index(
             "uq_runs_schedule_id_scheduled_for",
             "schedule_id",
@@ -52,11 +52,11 @@ class Run(Entity):
     template_id: Mapped[int] = mapped_column(ForeignKey("templates.id"))
     schedule_id: Mapped[int | None] = mapped_column(ForeignKey("schedules.id", ondelete="SET NULL"))
     scheduled_for: Mapped[datetime | None]
-    # Gekopieerd van de schedule bij aanmaken; handmatige runs gedragen zich als 'queue'.
+    # Copied from the schedule on creation; manual runs behave as 'queue'.
     overlap_policy: Mapped[str] = mapped_column(Text, server_default="queue")
     triggered_by: Mapped[str] = mapped_column(Text)
     status: Mapped[str] = mapped_column(Text, server_default=RunStatus.QUEUED.value)
-    # Effectieve launch-parameters: template-waarden samengevoegd met overrides.
+    # Effective launch parameters: template values merged with overrides.
     extra_vars: Mapped[JsonDict] = mapped_column(server_default="{}")
     limit: Mapped[str | None] = mapped_column(Text)
     commit_sha: Mapped[str | None] = mapped_column(Text)
@@ -85,8 +85,8 @@ class RunEvent(Entity):
 
 
 class RunStatsArchive(Entity):
-    """Tellingen van runs die door de retentie zijn verwijderd, zodat de metrics
-    (counters en het duur-histogram) na het opruimen blijven kloppen."""
+    """Counts of runs removed by retention, so the metrics (counters and the duration
+    histogram) stay correct after purging."""
 
     __tablename__ = "run_stats_archive"
     __table_args__ = (
@@ -98,5 +98,5 @@ class RunStatsArchive(Entity):
     runs: Mapped[int] = mapped_column(server_default="0")
     duration_count: Mapped[int] = mapped_column(server_default="0")
     duration_sum: Mapped[float] = mapped_column(Double, server_default="0")
-    # Cumulatieve bucket-tellingen: {"1": n, "5": n, ...} (bovengrens in seconden).
+    # Cumulative bucket counts: {"1": n, "5": n, ...} (upper bound in seconds).
     duration_buckets: Mapped[JsonDict] = mapped_column(server_default="{}")
