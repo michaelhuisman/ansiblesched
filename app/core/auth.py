@@ -1,7 +1,7 @@
 """Authenticatie en autorisatie.
 
 Een request wordt geauthenticeerd via (in deze volgorde):
-1. `Authorization: Bearer sched_...`: persoonlijke API-token van een lokale gebruiker;
+1. `Authorization: Bearer lamplighter_...`: persoonlijke API-token van een lokale gebruiker;
 2. `Authorization: Bearer <jwt>`: access token van de OIDC-provider (Keycloak);
 3. de sessiecookie van de UI. Schrijvende requests vereisen dan een CSRF-token
    (header `X-CSRF-Token` of formulierveld `csrf_token`) en een passende Origin.
@@ -25,7 +25,7 @@ from app.services import api_tokens, sessions
 
 log = logging.getLogger(__name__)
 
-SESSION_COOKIE = "sched_session"
+SESSION_COOKIE = "lamplighter_session"
 CSRF_HEADER = "X-CSRF-Token"
 CSRF_FIELD = "csrf_token"
 SAFE_METHODS = frozenset({"GET", "HEAD", "OPTIONS"})

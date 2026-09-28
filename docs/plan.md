@@ -1,4 +1,4 @@
-# ansible-scheduler — ontwerp en fasering
+# lamplighter — ontwerp en fasering
 
 ## Doel
 
@@ -23,7 +23,7 @@ state-store: jobstore, queue en locks.
 
 De scheduler neemt bij het opstarten `pg_try_advisory_lock(0x5343, 1)` op een eigen,
 langlevende connectie. Alleen de lock-houder start APScheduler. Anderen proberen het
-elke 10 seconden opnieuw (`SCHED_SCHEDULER_LOCK_RETRY_S`). Dezelfde connectie doet
+elke 10 seconden opnieuw (`LAMPLIGHTER_SCHEDULER_LOCK_RETRY_S`). Dezelfde connectie doet
 `LISTEN schedules_changed` en dient als health-check. Valt de connectie weg, dan stopt
 APScheduler direct en gaat de replica terug naar follower-modus.
 
@@ -38,7 +38,7 @@ ontstaat per afvuring maar één run.
 
 De `schedules`-tabel is de bron van waarheid en de jobs worden daaruit afgeleid.
 De leider reconcilieert na elke `NOTIFY schedules_changed` (die de API na elke wijziging
-stuurt) en daarnaast elke `SCHED_SCHEDULER_SYNC_INTERVAL_S` (5s):
+stuurt) en daarnaast elke `LAMPLIGHTER_SCHEDULER_SYNC_INTERVAL_S` (5s):
 
 - job-id `schedule:<id>`, job-naam = fingerprint van cron, timezone en misfire_grace_s;
 - nieuw of gewijzigd: `add_job(replace_existing=True)`. Ongewijzigde jobs blijven staan,
@@ -164,9 +164,9 @@ created_at, sent_at
 ## Uitvoering van een run
 
 1. Claim de run (zie Queue) en neem de overlap-lock.
-2. Clone of fetch de repo in de cache (`SCHED_REPO_CACHE_DIR/<project_id>`), check de
+2. Clone of fetch de repo in de cache (`LAMPLIGHTER_REPO_CACHE_DIR/<project_id>`), check de
    branch-HEAD uit in een per-run worktree en sla `commit_sha` op.
-3. Maak de private data dir onder `SCHED_RUNTIME_DIR/<run_id>` aan. De worktree staat in
+3. Maak de private data dir onder `LAMPLIGHTER_RUNTIME_DIR/<run_id>` aan. De worktree staat in
    `<run_id>/project`, een inline inventory in `<run_id>/inventory/hosts`. Er worden geen
    `env/`-bestanden geschreven (`suppress_env_files`): extravars gaan als argument mee,
    de SSH-key via de FIFO van ansible-runner naar ssh-agent, en een vault-wachtwoord als
@@ -209,44 +209,46 @@ GET   /metrics                          Prometheus (fase 3; open, zie Open punte
 GET   /ui/...                           server-rendered UI (Jinja2 + htmx)
 ```
 
-## Configuratie (env, prefix `SCHED_`)
+## Configuratie (env, prefix `LAMPLIGHTER_`)
 
 | Variabele               | Default                        |
 |-------------------------|--------------------------------|
-| `SCHED_DATABASE_URL`    | —                              |
-| `SCHED_RUNTIME_DIR`     | `/run/scheduler`               |
-| `SCHED_REPO_CACHE_DIR`  | `/var/cache/scheduler/repos`   |
-| `SCHED_WORKER_ID`       | hostname                       |
-| `SCHED_POLL_INTERVAL_S` | `2`                            |
-| `SCHED_LOG_LEVEL`       | `INFO`                         |
-| `SCHED_API_HOST`        | `0.0.0.0`                      |
-| `SCHED_API_PORT`        | `8000`                         |
-| `SCHED_ANSIBLE_HOST_KEY_CHECKING` | `true`               |
-| `SCHED_SCHEDULER_LOCK_RETRY_S` | `10`                    |
-| `SCHED_SCHEDULER_SYNC_INTERVAL_S` | `5`                  |
-| `SCHED_PUBLIC_URL`      | `http://localhost:8000`        |
-| `SCHED_WEBHOOK_OPENBAO_PATH` | — (leeg = geen webhooks) |
-| `SCHED_WEBHOOK_CACHE_S` | `60`                           |
-| `SCHED_AUTH_LOCAL_ENABLED` | `true`                      |
-| `SCHED_SESSION_COOKIE_SECURE` | `true` (dev: `false`)    |
-| `SCHED_SESSION_IDLE_S`  | `28800` (8 uur)                |
-| `SCHED_SESSION_MAX_S`   | `86400` (24 uur)               |
-| `SCHED_LOGIN_MAX_FAILURES` | `5`                         |
-| `SCHED_LOGIN_LOCKOUT_S` | `900`                          |
-| `SCHED_OIDC_DISCOVERY_URL` | — (default: van issuer)     |
-| `SCHED_OIDC_CLIENT_ID`  | `ansible-scheduler`            |
-| `SCHED_OIDC_CLIENT_SECRET` | —                           |
-| `SCHED_OPENBAO_ADDR`    | — (worker en scheduler)        |
-| `SCHED_OPENBAO_ROLE_ID` | — (AppRole per rol)            |
-| `SCHED_OPENBAO_SECRET_ID` | —                            |
-| `SCHED_OPENBAO_KV_MOUNT` | `secret`                      |
-| `SCHED_OPENBAO_CA_CERT` | — (systeem-CA's)               |
-| `SCHED_OIDC_ISSUER`     | — (leeg = alleen lokale login) |
-| `SCHED_OIDC_AUDIENCE`   | — (default: client-id)         |
+| `LAMPLIGHTER_DATABASE_URL`    | —                              |
+| `LAMPLIGHTER_RUNTIME_DIR`     | `/run/lamplighter`               |
+| `LAMPLIGHTER_REPO_CACHE_DIR`  | `/var/cache/lamplighter/repos`   |
+| `LAMPLIGHTER_WORKER_ID`       | hostname                       |
+| `LAMPLIGHTER_POLL_INTERVAL_S` | `2`                            |
+| `LAMPLIGHTER_LOG_LEVEL`       | `INFO`                         |
+| `LAMPLIGHTER_API_HOST`        | `0.0.0.0`                      |
+| `LAMPLIGHTER_API_PORT`        | `8000`                         |
+| `LAMPLIGHTER_ANSIBLE_HOST_KEY_CHECKING` | `true`               |
+| `LAMPLIGHTER_SCHEDULER_LOCK_RETRY_S` | `10`                    |
+| `LAMPLIGHTER_SCHEDULER_SYNC_INTERVAL_S` | `5`                  |
+| `LAMPLIGHTER_PUBLIC_URL`      | `http://localhost:8000`        |
+| `LAMPLIGHTER_WEBHOOK_OPENBAO_PATH` | — (leeg = geen webhooks) |
+| `LAMPLIGHTER_WEBHOOK_CACHE_S` | `60`                           |
+| `LAMPLIGHTER_AUTH_LOCAL_ENABLED` | `true`                      |
+| `LAMPLIGHTER_SESSION_COOKIE_SECURE` | `true` (dev: `false`)    |
+| `LAMPLIGHTER_SESSION_IDLE_S`  | `28800` (8 uur)                |
+| `LAMPLIGHTER_SESSION_MAX_S`   | `86400` (24 uur)               |
+| `LAMPLIGHTER_LOGIN_MAX_FAILURES` | `5`                         |
+| `LAMPLIGHTER_LOGIN_LOCKOUT_S` | `900`                          |
+| `LAMPLIGHTER_OIDC_DISCOVERY_URL` | — (default: van issuer)     |
+| `LAMPLIGHTER_OIDC_CLIENT_ID`  | `lamplighter`            |
+| `LAMPLIGHTER_OIDC_CLIENT_SECRET` | —                           |
+| `LAMPLIGHTER_OPENBAO_ADDR`    | — (worker en scheduler)        |
+| `LAMPLIGHTER_OPENBAO_ROLE_ID` | — (AppRole per rol)            |
+| `LAMPLIGHTER_OPENBAO_SECRET_ID` | —                            |
+| `LAMPLIGHTER_OPENBAO_KV_MOUNT` | `secret`                      |
+| `LAMPLIGHTER_OPENBAO_CA_CERT` | — (systeem-CA's)               |
+| `LAMPLIGHTER_OIDC_ISSUER`     | — (leeg = alleen lokale login) |
+| `LAMPLIGHTER_OIDC_AUDIENCE`   | — (default: client-id)         |
 
 ## Dev-omgeving (`compose.dev.yml`)
 
-- `postgres`: Postgres 16
+- `postgres`: Postgres 18 (image `postgres:18.6`). Het volume hoort op `/var/lib/postgresql`;
+  vanaf 18 staat PGDATA in `/var/lib/postgresql/18/docker`. Een upgrade vanaf een ouder
+  major-versie gaat via `pg_dump`/restore of `pg_upgrade`, niet door alleen het image te wisselen.
 - `migrate`, `api`, `scheduler`, `worker`: gebouwd uit de lokale Dockerfile
 - `ssh-target`: Debian-container met sshd en python3, key-auth met een gegenereerde
   dev-key. Dit is het enige doel voor integratietests.
@@ -259,7 +261,7 @@ GET   /ui/...                           server-rendered UI (Jinja2 + htmx)
 - De runtime-dir is een named tmpfs-volume, gedeeld tussen workers en read-only met
   `dev` (voor de cleanup-tests).
 - Credentials in fase 1: `DevFileResolver` leest
-  `SCHED_DEV_SECRETS_DIR/<openbao_path>/<openbao_key>`. `scripts/dev-keys.sh` genereert
+  `LAMPLIGHTER_DEV_SECRETS_DIR/<openbao_path>/<openbao_key>`. `scripts/dev-keys.sh` genereert
   de SSH-key en een vault-wachtwoord in `.dev/secrets`.
 
 ---
@@ -321,7 +323,7 @@ queue-diepte, laatste succesvolle run per schedule) en webhook-notificaties bij
 - **Webhooks:** een outbox-tabel `notifications`, gevuld in dezelfde transactie als het
   afronden van de run. De scheduler-leider verstuurt elke 5s (`SKIP LOCKED`) met backoff
   5s → 10s → … max 10 min, en geeft na 10 pogingen op (`failed`). Optioneel een
-  HMAC-SHA256-signatuur in `X-Scheduler-Signature`.
+  HMAC-SHA256-signatuur in `X-Lamplighter-Signature`.
 - **Auth-naad:** `current_user()` geeft in fase 3 een anonieme admin terug. Routes en
   templates checken `Principal.can(action)`.
 
@@ -337,7 +339,7 @@ audit, CSRF) en **4b** OpenBao (credentials, git-tokens, webhook-URL's)._
 
 **Uitwerking 4a**
 - **Identiteiten:** lokale gebruikers (rollen in de DB, argon2id, lockout na 5 fouten)
-  en Keycloak-gebruikers (rollen uit de token, client roles van `ansible-scheduler`;
+  en Keycloak-gebruikers (rollen uit de token, client roles van `lamplighter`;
   aangemaakt bij de eerste login). Beide bronnen zijn apart aan en uit te zetten.
   `triggered_by` is `user:local:<naam>` of `user:oidc:<sub>`.
 - **UI-sessies:** een server-side sessie in de DB met een cookie (`HttpOnly`,
@@ -348,7 +350,7 @@ audit, CSRF) en **4b** OpenBao (credentials, git-tokens, webhook-URL's)._
   `state`, `nonce` en de verifier staan in een kortlevende cookie. Het id_token en het
   access token worden gevalideerd via JWKS. Zonder rol wordt de login geweigerd.
 - **API:** accepteert de sessiecookie (met CSRF), een lokale API-token
-  (`Bearer sched_…`, alleen de hash in de DB, met vervaldatum) of een Keycloak-JWT
+  (`Bearer lamplighter_…`, alleen de hash in de DB, met vervaldatum) of een Keycloak-JWT
   (`iss`, `aud` en `exp` gecontroleerd). Zonder geldige authenticatie volgt 401, zonder
   de juiste rol 403.
 - **Rollen:** `viewer` (lezen), `operator` (plus launch en cancel), `admin` (plus
@@ -380,7 +382,7 @@ audit, CSRF) en **4b** OpenBao (credentials, git-tokens, webhook-URL's)._
   cache-repo, en `credential.helper` staat leeg.
 - **Webhooks:** de worker zet bij een fout-status één outbox-rij met `target='*'` en
   kent geen webhook-secrets. De scheduler-leider leest de config uit OpenBao (gecachet
-  `SCHED_WEBHOOK_CACHE_S`) en splitst `*` uit naar één rij per URL-fingerprint. Is
+  `LAMPLIGHTER_WEBHOOK_CACHE_S`) en splitst `*` uit naar één rij per URL-fingerprint. Is
   OpenBao niet bereikbaar, dan blijft de `*`-rij staan.
 - **Dev:** OpenBao 2.7.0 in dev-mode met `openbao-init` (policies, AppRoles met TTL 60s
   en max 300s, dev-secrets). Daarnaast een `git-http`-container (git http-backend met
@@ -402,7 +404,7 @@ worker, Keycloak OIDC-validatie (JWT via JWKS) en RBAC op client roles `viewer`,
 ## Fase 5 — Hardening en productie
 
 **Scope:** een productie-`compose.yml`, CI-pipeline (lint, test, build, push naar
-Harbor), een Ansible-rol `deploy/roles/ansible_scheduler`, een retentie-job voor
+Harbor), een Ansible-rol `deploy/roles/lamplighter`, een retentie-job voor
 `run_events` en oude runs, een backup van Postgres (`pg_dump`) en TLS via een reverse
 proxy.
 
@@ -433,7 +435,7 @@ proxy.
 - **Lockout per gebruikersnaam:** voorkomt brute force op één account. Een aanvaller kan
   daarmee wel een account tijdelijk blokkeren. Een rate limit per IP komt er in fase 5
   bij, via de proxy.
-- **Metrics en retentie (fase 5):** `sched_runs_total` wordt uit de runs-tabel geteld.
+- **Metrics en retentie (fase 5):** `lamplighter_runs_total` wordt uit de runs-tabel geteld.
   Retentie laat de waarde dalen, wat Prometheus als counter-reset ziet. Oplossing: een
   aggregatietabel bijhouden of de metric als gauge exposen.
 - **UI op smalle schermen:** de tabellen zijn voor desktop gemaakt en scrollen op een

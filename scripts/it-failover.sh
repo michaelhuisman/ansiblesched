@@ -10,16 +10,16 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-API=${SCHED_IT_API_URL:-http://127.0.0.1:8000}/api/v1
+API=${LAMPLIGHTER_IT_API_URL:-http://127.0.0.1:8000}/api/v1
 COMPOSE="podman compose -f compose.dev.yml"
 NS_SCHEDULER=$((0x5343))
 
-sql() { $COMPOSE exec -T postgres psql -U scheduler -d scheduler -Atc "$1" 2>/dev/null; }
+sql() { $COMPOSE exec -T postgres psql -U lamplighter -d lamplighter -Atc "$1" 2>/dev/null; }
 
 # Lokale admin + API-token via de CLI (het wachtwoord is niet nodig en gaat via stdin).
 LC_ALL=C tr -dc 'A-Za-z0-9' </dev/urandom | head -c 24 |
     $COMPOSE run --rm -T dev python -m app create-user it-failover --role admin >/dev/null 2>&1 || true
-TOKEN=$($COMPOSE run --rm -T dev python -m app create-token it-failover --name failover --expires-days 1 2>/dev/null | grep '^sched_')
+TOKEN=$($COMPOSE run --rm -T dev python -m app create-token it-failover --name failover --expires-days 1 2>/dev/null | grep '^lamplighter_')
 [ -n "$TOKEN" ] || { echo "FAIL: kon geen API-token aanmaken" >&2; exit 1; }
 AUTH="Authorization: Bearer $TOKEN"
 

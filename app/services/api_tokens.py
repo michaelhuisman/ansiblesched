@@ -16,7 +16,7 @@ from app.services import audit
 from app.services.errors import ConflictError, InvalidReferenceError, NotFoundError
 from app.services.sessions import hash_token
 
-PREFIX = "sched_"
+PREFIX = "lamplighter_"
 TOUCH_INTERVAL = timedelta(seconds=60)
 MAX_DAYS = 365
 

@@ -2,17 +2,19 @@
 #   podman compose -f compose.dev.yml up -d --build
 #   podman compose -f compose.dev.yml run --rm dev pytest tests/integration
 
+name: lamplighter # containers en volumes: lamplighter-<service>, lamplighter_<volume>
+
 x-app: &app
-  image: localhost/ansible-scheduler:dev
+  image: localhost/lamplighter:dev
   build:
     context: .
     target: dev
   environment: &app-env
-    SCHED_DATABASE_URL: postgresql+psycopg://scheduler:scheduler@postgres:5432/scheduler
-    SCHED_LOG_LEVEL: INFO
-    SCHED_PUBLIC_URL: http://localhost:8000
+    LAMPLIGHTER_DATABASE_URL: postgresql+psycopg://lamplighter:lamplighter@postgres:5432/lamplighter
+    LAMPLIGHTER_LOG_LEVEL: INFO
+    LAMPLIGHTER_PUBLIC_URL: http://localhost:8000
     # Dev draait via http; in productie blijft dit true.
-    SCHED_SESSION_COOKIE_SECURE: "false"
+    LAMPLIGHTER_SESSION_COOKIE_SECURE: "false"
   # Broncode gemount: na een codewijziging volstaat een herstart (geen rebuild).
   volumes:
     - ./app:/app/app:ro
@@ -23,7 +25,7 @@ x-app: &app
 
 services:
   postgres:
-    image: docker.io/library/postgres:16
+    image: docker.io/library/postgres:18.6
     # Een bevroren (niet gecrashte) leider verliest zijn advisory lock binnen ~15s.
     command:
       - postgres
@@ -34,15 +36,15 @@ services:
       - -c
       - tcp_keepalives_count=2
     environment:
-      POSTGRES_USER: scheduler
-      POSTGRES_PASSWORD: scheduler # alleen dev
-      POSTGRES_DB: scheduler
+      POSTGRES_USER: lamplighter
+      POSTGRES_PASSWORD: lamplighter # alleen dev
+      POSTGRES_DB: lamplighter
     ports:
       - "127.0.0.1:5432:5432"
     volumes:
-      - pgdata:/var/lib/postgresql/data
+      - pgdata:/var/lib/postgresql
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U scheduler -d scheduler"]
+      test: ["CMD-SHELL", "pg_isready -U lamplighter -d lamplighter"]
       interval: 2s
       timeout: 3s
       retries: 30
@@ -60,11 +62,11 @@ services:
     environment:
       <<: *app-env
       # De browser gebruikt localhost:8080 (issuer, login), de api het interne adres.
-      SCHED_OIDC_ISSUER: http://localhost:8080/realms/scheduler
-      SCHED_OIDC_DISCOVERY_URL: http://keycloak:8080/realms/scheduler/.well-known/openid-configuration
-      SCHED_OIDC_CLIENT_ID: ansible-scheduler
+      LAMPLIGHTER_OIDC_ISSUER: http://localhost:8080/realms/lamplighter
+      LAMPLIGHTER_OIDC_DISCOVERY_URL: http://keycloak:8080/realms/lamplighter/.well-known/openid-configuration
+      LAMPLIGHTER_OIDC_CLIENT_ID: lamplighter
     env_file:
-      - .dev/secrets/oidc.env # SCHED_OIDC_CLIENT_SECRET, van scripts/dev-keys.sh
+      - .dev/secrets/oidc.env # LAMPLIGHTER_OIDC_CLIENT_SECRET, van scripts/dev-keys.sh
     depends_on:
       migrate:
         condition: service_completed_successfully
@@ -102,11 +104,11 @@ services:
     command: ["scheduler"]
     environment:
       <<: *app-env
-      SCHED_OPENBAO_ADDR: http://openbao:8200
-      SCHED_WEBHOOK_OPENBAO_PATH: webhooks/default
-      SCHED_WEBHOOK_CACHE_S: "5" # kort in dev, zodat de rotatietest snel is
+      LAMPLIGHTER_OPENBAO_ADDR: http://openbao:8200
+      LAMPLIGHTER_WEBHOOK_OPENBAO_PATH: webhooks/default
+      LAMPLIGHTER_WEBHOOK_CACHE_S: "5" # kort in dev, zodat de rotatietest snel is
     env_file:
-      - .dev/secrets/openbao/scheduler.env # AppRole sched-scheduler
+      - .dev/secrets/openbao/scheduler.env # AppRole lamplighter-scheduler
     depends_on:
       migrate:
         condition: service_completed_successfully
@@ -119,20 +121,20 @@ services:
     stop_grace_period: 60s
     environment:
       <<: *app-env
-      SCHED_OPENBAO_ADDR: http://openbao:8200
-      SCHED_ANSIBLE_HOST_KEY_CHECKING: "false"
-      SCHED_POLL_INTERVAL_S: "1"
+      LAMPLIGHTER_OPENBAO_ADDR: http://openbao:8200
+      LAMPLIGHTER_ANSIBLE_HOST_KEY_CHECKING: "false"
+      LAMPLIGHTER_POLL_INTERVAL_S: "1"
       # De fixture-repo is door een andere container aangemaakt.
       GIT_CONFIG_COUNT: "1"
       GIT_CONFIG_KEY_0: safe.directory
       GIT_CONFIG_VALUE_0: "*"
     env_file:
-      - .dev/secrets/openbao/worker.env # AppRole sched-worker
+      - .dev/secrets/openbao/worker.env # AppRole lamplighter-worker
     volumes:
       - ./app:/app/app:ro
       - ./migrations:/app/migrations:ro
-      - runtime:/run/scheduler
-      - repocache:/var/cache/scheduler/repos
+      - runtime:/run/lamplighter
+      - repocache:/var/cache/lamplighter/repos
       - fixtures:/fixtures:ro
     depends_on:
       migrate:
@@ -218,18 +220,18 @@ services:
     working_dir: /src
     environment:
       <<: *app-env
-      SCHED_IT_API_URL: http://api:8000
-      SCHED_IT_WEBHOOK_SINK: http://webhook-sink:8080
-      SCHED_IT_KEYCLOAK: http://keycloak:8080
-      SCHED_IT_OPENBAO: http://openbao:8200
-      SCHED_IT_GIT_HTTP: http://git-http:8080
+      LAMPLIGHTER_IT_API_URL: http://api:8000
+      LAMPLIGHTER_IT_WEBHOOK_SINK: http://webhook-sink:8080
+      LAMPLIGHTER_IT_KEYCLOAK: http://keycloak:8080
+      LAMPLIGHTER_IT_OPENBAO: http://openbao:8200
+      LAMPLIGHTER_IT_GIT_HTTP: http://git-http:8080
       GIT_CONFIG_COUNT: "1"
       GIT_CONFIG_KEY_0: safe.directory
       GIT_CONFIG_VALUE_0: "*"
     volumes:
       - .:/src
-      - runtime:/run/scheduler:ro
-      - repocache:/var/cache/scheduler/repos:ro
+      - runtime:/run/lamplighter:ro
+      - repocache:/var/cache/lamplighter/repos:ro
       - fixtures:/fixtures:ro
       - ./.dev/secrets:/secrets:ro
 

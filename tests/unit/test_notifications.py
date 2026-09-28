@@ -109,7 +109,7 @@ def test_send_success_with_signature() -> None:
     assert err is None
     req = seen["req"]
     assert req.headers[SIGNATURE_HEADER] == sign(req.content, "s3cret")
-    assert req.headers["X-Scheduler-Event"] == "run.failed"
+    assert req.headers["X-Lamplighter-Event"] == "run.failed"
     assert json.loads(req.content)["run_id"] == 42
 
 

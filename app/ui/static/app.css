@@ -145,3 +145,9 @@ fieldset.choice label.check { flex: 0 0 auto; }
 .brand, .topbar .user, .topbar button { white-space: nowrap; }
 .topbar nav { overflow-x: auto; scrollbar-width: none; }
 .topbar nav a { padding: 6px 10px; white-space: nowrap; }
+
+/* --- logo --- */
+.brand { display: flex; align-items: center; }
+.brand-logo { height: 34px; width: auto; display: block; }
+.login-logo { display: flex; justify-content: center; margin-bottom: 24px; }
+.login-logo-img { height: 72px; width: auto; max-width: 100%; }

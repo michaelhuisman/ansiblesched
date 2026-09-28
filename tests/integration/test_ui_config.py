@@ -16,7 +16,7 @@ from tests.integration.conftest import (
     unique,
 )
 
-GIT_HTTP = os.environ.get("SCHED_IT_GIT_HTTP", "http://127.0.0.1:8081")
+GIT_HTTP = os.environ.get("LAMPLIGHTER_IT_GIT_HTTP", "http://127.0.0.1:8081")
 
 
 @pytest.fixture

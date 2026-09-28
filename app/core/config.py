@@ -7,11 +7,11 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
-    model_config = SettingsConfigDict(env_prefix="SCHED_", extra="ignore")
+    model_config = SettingsConfigDict(env_prefix="LAMPLIGHTER_", extra="ignore")
 
     database_url: str
-    runtime_dir: Path = Path("/run/scheduler")
-    repo_cache_dir: Path = Path("/var/cache/scheduler/repos")
+    runtime_dir: Path = Path("/run/lamplighter")
+    repo_cache_dir: Path = Path("/var/cache/lamplighter/repos")
     worker_id: str = Field(default_factory=socket.gethostname)
     poll_interval_s: float = 2.0
     log_level: str = "INFO"
@@ -51,7 +51,7 @@ class Settings(BaseSettings):
     oidc_issuer: str | None = None  # zoals in de `iss`-claim, bv. https://kc/realms/x
     # Discovery via een intern adres (bv. http://keycloak:8080/...); default: van issuer.
     oidc_discovery_url: str | None = None
-    oidc_client_id: str = "ansible-scheduler"
+    oidc_client_id: str = "lamplighter"
     oidc_client_secret: SecretStr | None = None
     # Verwachte `aud` in access tokens; default de client-id.
     oidc_audience: str | None = None

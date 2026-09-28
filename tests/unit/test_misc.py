@@ -16,20 +16,20 @@ from app.worker.credentials import (
 
 
 def test_settings_from_env(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("SCHED_DATABASE_URL", "postgresql+psycopg://u:p@h/db")
-    monkeypatch.setenv("SCHED_POLL_INTERVAL_S", "0.5")
-    monkeypatch.setenv("SCHED_WORKER_ID", "w1")
+    monkeypatch.setenv("LAMPLIGHTER_DATABASE_URL", "postgresql+psycopg://u:p@h/db")
+    monkeypatch.setenv("LAMPLIGHTER_POLL_INTERVAL_S", "0.5")
+    monkeypatch.setenv("LAMPLIGHTER_WORKER_ID", "w1")
     s = Settings()  # type: ignore[call-arg]
     assert s.database_url == "postgresql+psycopg://u:p@h/db"
     assert s.poll_interval_s == 0.5
     assert s.worker_id == "w1"
-    assert s.runtime_dir == Path("/run/scheduler")
+    assert s.runtime_dir == Path("/run/lamplighter")
     assert s.openbao_enabled is False
     assert s.webhook_openbao_path is None
 
 
 def test_settings_require_database_url(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.delenv("SCHED_DATABASE_URL", raising=False)
+    monkeypatch.delenv("LAMPLIGHTER_DATABASE_URL", raising=False)
     with pytest.raises(ValidationError):
         Settings()  # type: ignore[call-arg]
 

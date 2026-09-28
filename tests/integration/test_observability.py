@@ -17,7 +17,7 @@ from app.core.db import get_sessionmaker
 from app.models import Notification
 from tests.integration.conftest import API_URL, SECRETS_DIR, Env, LocalUser, login_ui, unique
 
-SINK = os.environ.get("SCHED_IT_WEBHOOK_SINK", "http://127.0.0.1:8080")
+SINK = os.environ.get("LAMPLIGHTER_IT_WEBHOOK_SINK", "http://127.0.0.1:8080")
 WEBHOOK_SECRET = (SECRETS_DIR / "webhook" / "hmac").read_text().strip()  # in OpenBao
 
 
@@ -108,7 +108,7 @@ def test_metrics_update_after_runs(env: Env) -> None:
     template = env.template("ping.yml")
     name = template["name"]
     before = httpx.get(f"{API_URL}/metrics").text
-    assert metric(before, "sched_runs_total", template=name) is None
+    assert metric(before, "lamplighter_runs_total", template=name) is None
 
     env.wait(env.launch(template)["id"])
     env.wait(env.launch(template)["id"])
@@ -117,9 +117,9 @@ def test_metrics_update_after_runs(env: Env) -> None:
     assert after.status_code == 200
     assert after.headers["content-type"].startswith("text/plain")
     text = after.text
-    assert metric(text, "sched_runs_total", template=name, status="successful") == 2
-    assert metric(text, "sched_run_duration_seconds_count", template=name) == 2
-    assert metric(text, "sched_queue_depth") is not None
+    assert metric(text, "lamplighter_runs_total", template=name, status="successful") == 2
+    assert metric(text, "lamplighter_run_duration_seconds_count", template=name) == 2
+    assert metric(text, "lamplighter_queue_depth") is not None
 
 
 # --- webhooks --------------------------------------------------------------------
@@ -176,7 +176,7 @@ def test_webhook_on_failed_run(env: Env) -> None:
     expected = hmac.new(
         WEBHOOK_SECRET.encode(), delivery["raw"].encode(), hashlib.sha256
     ).hexdigest()
-    assert headers["x-scheduler-signature"] == f"sha256={expected}"
+    assert headers["x-lamplighter-signature"] == f"sha256={expected}"
 
     note = notification_for(run["id"])
     assert note is not None
