@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+{% block title %}Inventories · ansible-scheduler{% endblock %}
+{% block content %}
+<div class="page-head">
+  <h1>Inventories</h1>
+  {% if user.can(Action.CONFIGURE) %}<a class="button" href="/ui/inventories/new">New inventory</a>{% endif %}
+</div>
+<table class="grid">
+  <thead><tr><th>Name</th><th>Source</th><th>Location</th><th></th></tr></thead>
+  <tbody>
+  {% for i in items %}
+    <tr>
+      <td>{{ i.name }}</td>
+      <td>{{ 'file in project' if i.source_type == 'project_file' else 'inline' }}</td>
+      <td class="mono">
+        {% if i.source_type == 'project_file' %}{{ project_names.get(i.project_id, i.project_id) }} : {{ i.path }}
+        {% else %}{{ (i.content or '').splitlines() | length }} line(s){% endif %}
+      </td>
+      <td class="actions">
+        {% if user.can(Action.CONFIGURE) %}
+          <a class="button small secondary" href="/ui/inventories/{{ i.id }}/edit">Edit</a>
+          <button class="small danger" hx-post="/ui/inventories/{{ i.id }}/delete" hx-target="next .row-error"
+                  hx-confirm="Delete inventory '{{ i.name }}'?">Delete</button>
+          <span class="row-error"></span>
+        {% endif %}
+      </td>
+    </tr>
+  {% else %}
+    <tr><td colspan="4" class="empty">No inventories yet.</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% endblock %}
