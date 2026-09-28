@@ -36,6 +36,27 @@ class Settings(BaseSettings):
     webhook_urls: list[SecretStr] = Field(default_factory=list)
     webhook_secret: SecretStr | None = None
 
+    # --- auth ---
+    auth_local_enabled: bool = True
+    session_cookie_secure: bool = True  # alleen in dev via http uitzetten
+    session_idle_s: int = 8 * 3600
+    session_max_s: int = 24 * 3600
+    login_max_failures: int = 5
+    login_lockout_s: int = 15 * 60
+
+    # OIDC (Keycloak). Leeg = alleen lokale users.
+    oidc_issuer: str | None = None  # zoals in de `iss`-claim, bv. https://kc/realms/x
+    # Discovery via een intern adres (bv. http://keycloak:8080/...); default: van issuer.
+    oidc_discovery_url: str | None = None
+    oidc_client_id: str = "ansible-scheduler"
+    oidc_client_secret: SecretStr | None = None
+    # Verwachte `aud` in access tokens; default de client-id.
+    oidc_audience: str | None = None
+
+    @property
+    def oidc_enabled(self) -> bool:
+        return bool(self.oidc_issuer and self.oidc_client_secret)
+
 
 @lru_cache
 def get_settings() -> Settings:

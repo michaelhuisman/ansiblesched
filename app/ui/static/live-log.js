@@ -28,7 +28,7 @@
 
   const es = new EventSource(`/api/v1/runs/${runId}/stream`);
   es.onopen = () => { state.textContent = "live"; };
-  es.onerror = () => { state.textContent = "opnieuw verbinden…"; };
+  es.onerror = () => { state.textContent = "reconnecting…"; };
   es.addEventListener("run_event", (msg) => {
     const ev = JSON.parse(msg.data);
     if (ev.stdout) append(ev.stdout.replace(/^\r?\n/, ""), classFor(ev));
@@ -39,8 +39,8 @@
   });
   es.addEventListener("end", (msg) => {
     const st = JSON.parse(msg.data);
-    state.textContent = `afgerond: ${st.status}`;
-    if (!log.textContent) append("(geen output)", "ev-note");
+    state.textContent = `finished: ${st.status}`;
+    if (!log.textContent) append("(no output)", "ev-note");
     es.close();
   });
   follow.addEventListener("change", () => { if (follow.checked) log.scrollTop = log.scrollHeight; });

@@ -14,6 +14,12 @@ x-app: &app
     # Alleen dev: de sink hieronder. Echte webhook-URL's zijn secrets.
     SCHED_WEBHOOK_URLS: '["http://webhook-sink:8080/hook"]'
     SCHED_WEBHOOK_SECRET: dev-webhook-secret
+    # Dev draait via http; in productie blijft dit true.
+    SCHED_SESSION_COOKIE_SECURE: "false"
+  # Broncode gemount: na een codewijziging volstaat een herstart (geen rebuild).
+  volumes:
+    - ./app:/app/app:ro
+    - ./migrations:/app/migrations:ro
   depends_on:
     postgres:
       condition: service_healthy
@@ -54,9 +60,44 @@ services:
     command: ["api"]
     ports:
       - "127.0.0.1:8000:8000"
+    environment:
+      <<: *app-env
+      # De browser gebruikt localhost:8080 (issuer, login), de api het interne adres.
+      SCHED_OIDC_ISSUER: http://localhost:8080/realms/scheduler
+      SCHED_OIDC_DISCOVERY_URL: http://keycloak:8080/realms/scheduler/.well-known/openid-configuration
+      SCHED_OIDC_CLIENT_ID: ansible-scheduler
+    env_file:
+      - .dev/secrets/oidc.env # SCHED_OIDC_CLIENT_SECRET, van scripts/dev-keys.sh
     depends_on:
       migrate:
         condition: service_completed_successfully
+
+  # Alleen dev. Realm, clients en testgebruikers uit .dev/keycloak (scripts/dev-keys.sh).
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.7.4
+    command: ["start-dev", "--import-realm"]
+    environment:
+      KC_HOSTNAME: http://localhost:8080
+      # Token- en JWKS-endpoints volgen het adres van de aanvrager (keycloak:8080).
+      KC_HOSTNAME_BACKCHANNEL_DYNAMIC: "true"
+      KC_HTTP_ENABLED: "true"
+      KC_HEALTH_ENABLED: "true"
+    env_file:
+      - .dev/secrets/keycloak.env
+    ports:
+      - "127.0.0.1:8080:8080"
+    volumes:
+      - ./.dev/keycloak:/opt/keycloak/data/import:ro
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - >-
+          exec 3<>/dev/tcp/127.0.0.1/9000 &&
+          printf 'GET /health/ready HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n' >&3 &&
+          grep -q '"UP"' <&3
+      interval: 5s
+      timeout: 5s
+      retries: 40
 
   # Draai met --scale scheduler=2 om leader election te testen.
   scheduler:
@@ -80,6 +121,8 @@ services:
       GIT_CONFIG_KEY_0: safe.directory
       GIT_CONFIG_VALUE_0: "*"
     volumes:
+      - ./app:/app/app:ro
+      - ./migrations:/app/migrations:ro
       - runtime:/run/scheduler
       - fixtures:/fixtures:ro
       - ./.dev/secrets:/secrets:ro
@@ -127,6 +170,7 @@ services:
       <<: *app-env
       SCHED_IT_API_URL: http://api:8000
       SCHED_IT_WEBHOOK_SINK: http://webhook-sink:8080
+      SCHED_IT_KEYCLOAK: http://keycloak:8080
       GIT_CONFIG_COUNT: "1"
       GIT_CONFIG_KEY_0: safe.directory
       GIT_CONFIG_VALUE_0: "*"

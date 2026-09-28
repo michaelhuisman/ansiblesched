@@ -1,5 +1,8 @@
 # syntax=docker/dockerfile:1
-FROM docker.io/library/python:3.12-slim AS base
+# Stages: system (OS + runtime-dependencies) -> dev-deps (+ tooling) -> dev (+ code, tests)
+#                                            -> runtime (+ code; default target)
+# Dependencies staan vóór de code, zodat een codewijziging geen pip install triggert.
+FROM docker.io/library/python:3.12-slim AS system
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
@@ -22,23 +25,29 @@ WORKDIR /app
 COPY requirements.txt .
 RUN pip install -r requirements.txt
 
-COPY alembic.ini ./
-COPY migrations ./migrations
-COPY app ./app
-# Bestanden die in de dev-container zijn aangemaakt (bv. Alembic-revisies) kunnen via de
-# virtiofs-mount op de host 0600 zijn; het image moet ze als 'app' kunnen lezen.
-RUN chmod -R a+rX /app
-
-USER app
 ENTRYPOINT ["tini", "--", "python", "-m", "app"]
 CMD ["api"]
 
-# Dev-image: tooling (ruff, mypy, pytest) en de tests. De broncode wordt in dev
-# gemount, zodat wijzigingen zonder rebuild zichtbaar zijn.
-FROM base AS dev
-USER root
+# Tooling (ruff, mypy, pytest) voor het dev-image.
+FROM system AS dev-deps
 COPY requirements-dev.txt .
 RUN pip install -r requirements-dev.txt
-COPY pyproject.toml ./
+
+# Dev-image: in compose.dev.yml wordt de broncode ook gemount, zodat wijzigingen
+# zonder rebuild zichtbaar zijn (herstart volstaat).
+FROM dev-deps AS dev
+COPY alembic.ini pyproject.toml ./
+COPY migrations ./migrations
+COPY app ./app
 COPY tests ./tests
+# Bestanden die in de dev-container zijn aangemaakt (bv. Alembic-revisies) kunnen via de
+# virtiofs-mount op de host 0600 zijn; het image moet ze als 'app' kunnen lezen.
+RUN chmod -R a+rX /app
+USER app
+
+FROM system AS runtime
+COPY alembic.ini ./
+COPY migrations ./migrations
+COPY app ./app
+RUN chmod -R a+rX /app
 USER app

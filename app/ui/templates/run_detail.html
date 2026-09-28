@@ -3,14 +3,14 @@
 {% block content %}
 <div class="page-head">
   <h1>Run {{ run.id }} <span class="muted">· {{ template.name }}</span></h1>
-  <a class="button secondary" href="/ui/runs">← Alle runs</a>
+  <a class="button secondary" href="/ui/runs">← All runs</a>
 </div>
 {% include "_run_meta.html" %}
 <section class="log-wrap">
   <div class="log-head">
     <h2>Log</h2>
-    <span id="stream-state" class="muted">verbinden…</span>
-    <label class="follow"><input type="checkbox" id="follow" checked> meescrollen</label>
+    <span id="stream-state" class="muted">connecting…</span>
+    <label class="follow"><input type="checkbox" id="follow" checked> follow</label>
   </div>
   <pre id="log" class="log" data-run-id="{{ run.id }}"></pre>
 </section>

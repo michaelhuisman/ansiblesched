@@ -6,6 +6,7 @@ import json
 import os
 import re
 import time
+from collections.abc import Iterator
 from typing import Any
 
 import httpx
@@ -14,7 +15,7 @@ from sqlalchemy import select
 
 from app.core.db import get_sessionmaker
 from app.models import Notification
-from tests.integration.conftest import API_URL, Env, unique
+from tests.integration.conftest import API_URL, Env, LocalUser, login_ui, unique
 
 SINK = os.environ.get("SCHED_IT_WEBHOOK_SINK", "http://127.0.0.1:8080")
 WEBHOOK_SECRET = "dev-webhook-secret"  # zie compose.dev.yml
@@ -24,7 +25,7 @@ WEBHOOK_SECRET = "dev-webhook-secret"  # zie compose.dev.yml
 
 
 def read_stream(
-    run_id: int, headers: dict[str, str] | None = None, timeout: float = 60
+    run_id: int, headers: dict[str, str], timeout: float = 60
 ) -> list[tuple[str, dict[str, Any], str | None]]:
     events: list[tuple[str, dict[str, Any], str | None]] = []
     current: dict[str, str] = {}
@@ -52,7 +53,7 @@ def test_stream_follows_running_run(env: Env) -> None:
     template = env.template("steps.yml", extra_vars={"step_s": 1})
     run_id = env.launch(template)["id"]
 
-    events = read_stream(run_id)
+    events = read_stream(run_id, dict(env.api.headers))
 
     kinds = [k for k, _, _ in events]
     assert kinds[-1] == "end"
@@ -76,14 +77,19 @@ def test_stream_resumes_after_last_event_id(env: Env) -> None:
     run_id = env.wait(env.launch(env.template("ping.yml"))["id"])["id"]
     all_seqs = [e["seq"] for e in env.events(run_id)]
     cut = all_seqs[len(all_seqs) // 2]
-    events = read_stream(run_id, headers={"Last-Event-ID": str(cut)})
+    events = read_stream(run_id, {**env.api.headers, "Last-Event-ID": str(cut)})
     seqs = [d["seq"] for k, d, _ in events if k == "run_event"]
     assert seqs == [s for s in all_seqs if s > cut]
 
 
-def test_stream_unknown_run() -> None:
-    resp = httpx.get(f"{API_URL}/api/v1/runs/999999/stream")
+def test_stream_unknown_run(env: Env) -> None:
+    resp = httpx.get(f"{API_URL}/api/v1/runs/999999/stream", headers=env.api.headers)
     assert resp.status_code == 404
+
+
+def test_stream_requires_auth(env: Env) -> None:
+    run_id = env.wait(env.launch(env.template("ping.yml"))["id"])["id"]
+    assert httpx.get(f"{API_URL}/api/v1/runs/{run_id}/stream").status_code == 401
 
 
 # --- metrics ---------------------------------------------------------------------
@@ -203,8 +209,10 @@ def test_no_webhook_for_successful_run(env: Env) -> None:
 
 
 @pytest.fixture
-def ui() -> httpx.Client:
-    return httpx.Client(base_url=f"{API_URL}/ui", timeout=10, follow_redirects=False)
+def ui(admin: LocalUser) -> Iterator[httpx.Client]:
+    client = login_ui(admin.username, admin.password)
+    yield client
+    client.close()
 
 
 def test_ui_pages_render(ui: httpx.Client, env: Env) -> None:
@@ -251,7 +259,7 @@ def test_ui_template_create_validation_and_launch(ui: httpx.Client, env: Env) ->
     }
     bad = ui.post("/templates", data=form)
     assert bad.status_code == 422
-    assert "ongeldige JSON" in bad.text
+    assert "invalid JSON" in bad.text
     assert name in bad.text  # ingevulde waarden blijven staan
 
     form["extra_vars"] = '{"greeting": "<script>alert(1)</script>"}'
@@ -310,7 +318,7 @@ def test_ui_cancel_running_run(ui: httpx.Client, env: Env) -> None:
     env.wait(run_id, {"running"})
     resp = ui.post(f"/runs/{run_id}/cancel")
     assert resp.status_code == 200
-    assert "annuleren aangevraagd" in resp.text
+    assert "cancel requested" in resp.text
     assert env.wait(run_id, timeout=30)["status"] == "canceled"
 
 

@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="nl">
+<html lang="en">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -7,16 +7,27 @@
   <link rel="stylesheet" href="/ui/static/app.css">
   <script src="/ui/static/htmx.min.js" defer></script>
 </head>
-<body>
+{# htmx sends the CSRF token with every non-GET request. #}
+<body {% if user and user.csrf_token %}hx-headers='{"X-CSRF-Token": "{{ user.csrf_token }}"}'{% endif %}>
   <header class="topbar">
     <a class="brand" href="/ui/runs">ansible-scheduler</a>
+    {% if user %}
     <nav>
       {% set section = request.url.path.split('/')[2] if request.url.path.count('/') > 1 else '' %}
       <a href="/ui/runs" {% if section == 'runs' %}aria-current="page"{% endif %}>Runs</a>
       <a href="/ui/templates" {% if section == 'templates' %}aria-current="page"{% endif %}>Templates</a>
       <a href="/ui/schedules" {% if section == 'schedules' %}aria-current="page"{% endif %}>Schedules</a>
+      {% if user.can(Action.MANAGE_USERS) %}
+        <a href="/ui/users" {% if section == 'users' %}aria-current="page"{% endif %}>Users</a>
+        <a href="/ui/audit" {% if section == 'audit' %}aria-current="page"{% endif %}>Audit</a>
+      {% endif %}
     </nav>
-    <span class="user" title="Fase 3: geen authenticatie (alleen dev)">{{ user.subject }}</span>
+    <a class="user" href="/ui/account" title="{{ user.subject }} · {{ user.roles | sort | join(', ') }}">{{ user.label }}</a>
+    <form method="post" action="/ui/logout" class="inline">
+      {% include "_csrf.html" %}
+      <button class="small secondary" type="submit">Sign out</button>
+    </form>
+    {% endif %}
   </header>
   <main>
     {% block content %}{% endblock %}

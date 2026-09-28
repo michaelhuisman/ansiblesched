@@ -9,7 +9,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.models import Run, RunEvent, RunStatus, Template
-from app.services import crud
+from app.services import audit, crud
 from app.services.errors import ConflictError, NotFoundError
 
 
@@ -20,6 +20,7 @@ def launch(
     triggered_by: str,
     extra_vars: dict[str, Any] | None = None,  # vrije JSON van de gebruiker
     limit: str | None = None,
+    actor: audit.Actor | None = None,
 ) -> Run:
     template = crud.get(session, Template, template_id)
     run = Run(
@@ -32,6 +33,15 @@ def launch(
         limit=limit if limit is not None else template.limit,
     )
     session.add(run)
+    session.flush()
+    audit.record(
+        session,
+        actor,
+        "run.launch",
+        "run",
+        run.id,
+        {"template_id": template.id, "template": template.name, "limit": run.limit},
+    )
     session.commit()
     session.refresh(run)
     return run
@@ -74,7 +84,7 @@ def list_events(
     return session.scalars(stmt).all()
 
 
-def cancel(session: Session, run_id: int) -> Run:
+def cancel(session: Session, run_id: int, *, actor: audit.Actor | None = None) -> Run:
     """Een queued run wordt direct geannuleerd; een lopende run krijgt een verzoek dat
     de worker via zijn cancel_callback oppikt."""
     run = session.scalars(select(Run).where(Run.id == run_id).with_for_update()).one_or_none()
@@ -92,6 +102,7 @@ def cancel(session: Session, run_id: int) -> Run:
     else:
         session.rollback()
         raise ConflictError(f"run {run_id} is already {run.status}")
+    audit.record(session, actor, "run.cancel", "run", run.id, {"status": run.status})
     session.commit()
     session.refresh(run)
     return run

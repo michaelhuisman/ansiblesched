@@ -23,7 +23,10 @@ from app.models import JOBSTORE_TABLE
 from app.scheduler.jobs import (
     NOTIFICATIONS_INTERVAL_S,
     NOTIFICATIONS_JOB_ID,
+    SESSION_PURGE_INTERVAL_S,
+    SESSION_PURGE_JOB_ID,
     deliver_notifications,
+    purge_sessions,
     record_missed,
     schedule_id_of,
 )
@@ -59,6 +62,15 @@ def _build_scheduler() -> BackgroundScheduler:
         "interval",
         seconds=NOTIFICATIONS_INTERVAL_S,
         id=NOTIFICATIONS_JOB_ID,
+        jobstore="internal",
+        max_instances=1,
+        coalesce=True,
+    )
+    scheduler.add_job(
+        purge_sessions,
+        "interval",
+        seconds=SESSION_PURGE_INTERVAL_S,
+        id=SESSION_PURGE_JOB_ID,
         jobstore="internal",
         max_instances=1,
         coalesce=True,

@@ -7,7 +7,7 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.api import schemas
-from app.api.deps import SessionDep, require
+from app.api.deps import ActorDep, SessionDep, require
 from app.core.auth import Action
 from app.models import Credential, Entity, Inventory, Project, Schedule, Template
 from app.services import crud, schedules
@@ -36,8 +36,8 @@ def crud_router[In: BaseModel, Out: BaseModel](
     @router.post(
         "", response_model=schema_out, status_code=status.HTTP_201_CREATED, dependencies=CONFIGURE
     )
-    def create_item(body: schema_in, session: SessionDep) -> Out:  # type: ignore[valid-type]
-        obj = crud.create(session, model, body.model_dump())  # type: ignore[attr-defined]
+    def create_item(body: schema_in, session: SessionDep, actor: ActorDep) -> Out:  # type: ignore[valid-type]
+        obj = crud.create(session, model, body.model_dump(), actor=actor)  # type: ignore[attr-defined]
         changed(session)
         return schema_out.model_validate(obj)
 
@@ -46,14 +46,19 @@ def crud_router[In: BaseModel, Out: BaseModel](
         return schema_out.model_validate(crud.get(session, model, obj_id))
 
     @router.put("/{obj_id}", response_model=schema_out, dependencies=CONFIGURE)
-    def replace_item(obj_id: int, body: schema_in, session: SessionDep) -> Out:  # type: ignore[valid-type]
-        obj = crud.update(session, model, obj_id, body.model_dump())  # type: ignore[attr-defined]
+    def replace_item(
+        obj_id: int,
+        body: schema_in,  # type: ignore[valid-type]
+        session: SessionDep,
+        actor: ActorDep,
+    ) -> Out:
+        obj = crud.update(session, model, obj_id, body.model_dump(), actor=actor)  # type: ignore[attr-defined]
         changed(session)
         return schema_out.model_validate(obj)
 
     @router.delete("/{obj_id}", status_code=status.HTTP_204_NO_CONTENT, dependencies=CONFIGURE)
-    def delete_item(obj_id: int, session: SessionDep) -> None:
-        crud.delete(session, model, obj_id)
+    def delete_item(obj_id: int, session: SessionDep, actor: ActorDep) -> None:
+        crud.delete(session, model, obj_id, actor=actor)
         changed(session)
 
     return router

@@ -8,15 +8,15 @@
   <td>
     {% if user.can(Action.CONFIGURE) %}
       <button class="small toggle {{ 'on' if s.enabled else 'off' }}" hx-post="/ui/schedules/{{ s.id }}/toggle"
-              hx-target="closest tr" hx-swap="outerHTML">{{ 'aan' if s.enabled else 'uit' }}</button>
-    {% else %}{{ 'aan' if s.enabled else 'uit' }}{% endif %}
+              hx-target="closest tr" hx-swap="outerHTML">{{ 'on' if s.enabled else 'off' }}</button>
+    {% else %}{{ 'on' if s.enabled else 'off' }}{% endif %}
   </td>
   <td class="actions">
     <a class="button small secondary" href="/ui/runs?template_id={{ s.template_id }}">Runs</a>
     {% if user.can(Action.CONFIGURE) %}
-      <a class="button small secondary" href="/ui/schedules/{{ s.id }}/edit">Bewerken</a>
+      <a class="button small secondary" href="/ui/schedules/{{ s.id }}/edit">Edit</a>
       <button class="small danger" hx-post="/ui/schedules/{{ s.id }}/delete" hx-target="closest tr" hx-swap="outerHTML"
-              hx-confirm="Schedule {{ s.id }} verwijderen?">Verwijderen</button>
+              hx-confirm="Delete schedule {{ s.id }}?">Delete</button>
     {% endif %}
   </td>
 </tr>

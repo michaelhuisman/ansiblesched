@@ -1,0 +1,60 @@
+{% extends "base.html" %}
+{% block title %}{{ 'Edit user' if editing else 'Add local user' }} · ansible-scheduler{% endblock %}
+{% block content %}
+<div class="page-head">
+  <h1>{% if editing %}Edit user <span class="muted">· {{ item.display_name or item.username }}</span>{% else %}Add local user{% endif %}</h1>
+  <div class="head-actions">
+    {% if editing and item.source == 'local' %}
+      <a class="button secondary" href="/ui/users/{{ item.id }}/password">Reset password</a>
+    {% endif %}
+    <a class="button secondary" href="/ui/users">Back</a>
+  </div>
+</div>
+{% if error %}<p class="error">{{ error }}</p>{% endif %}
+
+{% if editing and item.source != 'local' %}
+<section class="card">
+  <dl class="meta">
+    <div><dt>Name</dt><dd>{{ item.display_name or '–' }}</dd></div>
+    <div><dt>Subject</dt><dd class="mono">{{ item.username }}</dd></div>
+    <div><dt>E-mail</dt><dd>{{ item.email or '–' }}</dd></div>
+    <div><dt>Last login (UTC)</dt><dd class="mono">{{ item.last_login_at | dt or '–' }}</dd></div>
+  </dl>
+  <p class="muted">This user is managed in Keycloak. Roles come from the token at sign-in.</p>
+</section>
+{% else %}
+<form class="card form" method="post" action="{{ '/ui/users/' ~ item.id if editing else '/ui/users' }}">
+  {% include "_csrf.html" %}
+  <div class="row">
+    <label>Username
+      {% if editing %}
+        <input value="{{ item.username }}" disabled>
+      {% else %}
+        <input name="username" value="{{ form.get('username', '') }}" pattern="[a-z0-9][a-z0-9._\-]{1,63}"
+               autocomplete="off" required>
+        <small class="muted">2–64 characters: a-z, 0-9, dot, underscore, hyphen</small>
+      {% endif %}
+    </label>
+    <label>Display name <input name="display_name" value="{{ form.get('display_name') or '' }}"></label>
+  </div>
+  {% if not editing %}
+  <div class="row">
+    <label>Password <input name="password" type="password" minlength="12" autocomplete="new-password" required>
+      <small class="muted">At least 12 characters</small></label>
+    <label>Confirm password <input name="password_confirm" type="password" minlength="12" autocomplete="new-password" required></label>
+  </div>
+  {% endif %}
+  <fieldset class="roles-field">
+    <legend>Roles</legend>
+    {% for r in roles %}
+      <label class="check"><input type="checkbox" name="roles" value="{{ r }}" {% if r in form.get('roles', []) %}checked{% endif %}> {{ r }}</label>
+    {% endfor %}
+    <small class="muted">viewer: read · operator: read, launch, cancel · admin: everything</small>
+  </fieldset>
+  {% if editing %}
+    <label class="check"><input type="checkbox" name="disabled" {% if form.get('disabled') %}checked{% endif %}> Disabled</label>
+  {% endif %}
+  <div class="form-actions"><button type="submit">{{ 'Save' if editing else 'Add user' }}</button></div>
+</form>
+{% endif %}
+{% endblock %}

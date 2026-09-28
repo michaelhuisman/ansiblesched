@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+{% block title %}Users · ansible-scheduler{% endblock %}
+{% block content %}
+<div class="page-head">
+  <h1>Users</h1>
+  <a class="button" href="/ui/users/new">Add local user</a>
+</div>
+<table class="grid">
+  <thead><tr><th>User</th><th>Source</th><th>Roles</th><th>Status</th><th>Last login (UTC)</th></tr></thead>
+  <tbody>
+  {% for u in users %}
+    <tr>
+      <td>
+        <a href="/ui/users/{{ u.id }}/edit">{{ u.display_name or u.username }}</a>
+        {% if u.display_name and u.source == 'local' %}<span class="muted mono">{{ u.username }}</span>{% endif %}
+      </td>
+      <td>{{ 'local' if u.source == 'local' else 'Keycloak' }}</td>
+      <td>{% if u.source == 'local' %}{{ u.roles | join(', ') or '–' }}{% else %}<span class="muted">from token</span>{% endif %}</td>
+      <td>{% if u.disabled %}<span class="badge status-failed">disabled</span>{% else %}<span class="badge status-successful">active</span>{% endif %}</td>
+      <td class="mono muted">{{ u.last_login_at | dt or '–' }}</td>
+    </tr>
+  {% else %}
+    <tr><td colspan="5" class="empty">No users yet.</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% endblock %}

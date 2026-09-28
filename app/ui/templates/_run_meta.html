@@ -2,12 +2,12 @@
   {% if run.status not in FINAL_STATUSES %}hx-get="/ui/runs/{{ run.id }}/meta" hx-trigger="every 2s" hx-swap="outerHTML"{% endif %}>
   <dl class="meta">
     <div><dt>Status</dt><dd>{% with status=run.status %}{% include "_status.html" %}{% endwith %}
-      {% if run.cancel_requested_at and run.status == 'running' %}<span class="muted">(annuleren aangevraagd)</span>{% endif %}</dd></div>
+      {% if run.cancel_requested_at and run.status == 'running' %}<span class="muted">(cancel requested)</span>{% endif %}</dd></div>
     <div><dt>rc</dt><dd class="mono">{{ run.rc if run.rc is not none else '–' }}</dd></div>
     <div><dt>Trigger</dt><dd>{{ run.triggered_by }}{% if schedule %} · <a href="/ui/schedules">schedule {{ schedule.id }}</a>{% endif %}</dd></div>
     <div><dt>Commit</dt><dd class="mono">{{ run.commit_sha[:12] if run.commit_sha else '–' }}</dd></div>
-    <div><dt>Gestart</dt><dd class="mono">{{ run.started_at | dt or '–' }}</dd></div>
-    <div><dt>Duur</dt><dd class="mono">{{ duration(run.started_at, run.finished_at) or '–' }}</dd></div>
+    <div><dt>Started</dt><dd class="mono">{{ run.started_at | dt or '–' }}</dd></div>
+    <div><dt>Duration</dt><dd class="mono">{{ duration(run.started_at, run.finished_at) or '–' }}</dd></div>
     <div><dt>Worker</dt><dd class="mono">{{ run.worker_id or '–' }}</dd></div>
     {% if run.limit %}<div><dt>Limit</dt><dd class="mono">{{ run.limit }}</dd></div>{% endif %}
   </dl>
@@ -33,6 +33,6 @@
   {% endif %}
   {% if run.status not in FINAL_STATUSES and user.can(Action.CANCEL) and not run.cancel_requested_at %}
     <button class="danger" hx-post="/ui/runs/{{ run.id }}/cancel" hx-target="#run-meta" hx-swap="outerHTML"
-            hx-confirm="Run {{ run.id }} annuleren?">Annuleren</button>
+            hx-confirm="Cancel run {{ run.id }}?">Cancel run</button>
   {% endif %}
 </section>

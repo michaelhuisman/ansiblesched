@@ -1,6 +1,6 @@
 <table class="grid">
   <thead>
-    <tr><th>#</th><th>Template</th><th>Status</th><th>Trigger</th><th>Gepland / aangemaakt (UTC)</th><th>Duur</th><th>Worker</th></tr>
+    <tr><th>#</th><th>Template</th><th>Status</th><th>Trigger</th><th>Scheduled / created (UTC)</th><th>Duration</th><th>Worker</th></tr>
   </thead>
   <tbody>
   {% for r in runs %}
@@ -14,7 +14,7 @@
       <td class="muted mono">{{ r.worker_id or '' }}</td>
     </tr>
   {% else %}
-    <tr><td colspan="7" class="empty">Geen runs gevonden.</td></tr>
+    <tr><td colspan="7" class="empty">No runs found.</td></tr>
   {% endfor %}
   </tbody>
 </table>

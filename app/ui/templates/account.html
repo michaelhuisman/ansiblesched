@@ -1,0 +1,61 @@
+{% extends "base.html" %}
+{% block title %}Account · ansible-scheduler{% endblock %}
+{% block content %}
+<div class="page-head">
+  <h1>Account</h1>
+  {% if user.source == 'local' %}<a class="button secondary" href="/ui/account/password">Change password</a>{% endif %}
+</div>
+<section class="card">
+  <dl class="meta">
+    <div><dt>Name</dt><dd>{{ user.label }}</dd></div>
+    <div><dt>Identity</dt><dd class="mono">{{ user.subject }}</dd></div>
+    <div><dt>Source</dt><dd>{{ 'local' if user.source == 'local' else 'Keycloak' }}</dd></div>
+    <div><dt>Roles</dt><dd>{{ user.roles | sort | join(', ') or '–' }}</dd></div>
+  </dl>
+</section>
+
+{% if user.source == 'local' %}
+<h2 class="section">API tokens</h2>
+{% if new_token %}
+  <div class="card notice">
+    <p><strong>Token "{{ new_token_name }}" created.</strong> Copy it now; it will not be shown again.</p>
+    <pre class="token mono">{{ new_token }}</pre>
+    <p class="muted">Usage: <span class="mono">Authorization: Bearer &lt;token&gt;</span></p>
+  </div>
+{% endif %}
+<table class="grid">
+  <thead><tr><th>Name</th><th>Starts with</th><th>Created (UTC)</th><th>Expires (UTC)</th><th>Last used (UTC)</th><th></th></tr></thead>
+  <tbody>
+  {% for t in tokens %}
+    <tr>
+      <td>{{ t.name }}</td><td class="mono">{{ t.prefix }}…</td>
+      <td class="mono">{{ t.created_at | dt }}</td><td class="mono">{{ t.expires_at | dt or 'never' }}</td>
+      <td class="mono">{{ t.last_used_at | dt or '–' }}</td>
+      <td class="actions">
+        <form method="post" action="/ui/account/tokens/{{ t.id }}/revoke" class="inline"
+              onsubmit="return confirm('Revoke this token?')">
+          {% include "_csrf.html" %}<button class="small danger">Revoke</button>
+        </form>
+      </td>
+    </tr>
+  {% else %}
+    <tr><td colspan="6" class="empty">No active tokens.</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+<form class="card form inline-form" method="post" action="/ui/account/tokens">
+  {% include "_csrf.html" %}
+  <div class="row">
+    <label>Name <input name="name" placeholder="e.g. ci-pipeline" required></label>
+    <label>Valid for (days)
+      <select name="expires_days">
+        {% for d in [7, 30, 90, 365] %}<option value="{{ d }}" {% if d == 90 %}selected{% endif %}>{{ d }}</option>{% endfor %}
+      </select></label>
+  </div>
+  {% if token_error %}<p class="error">{{ token_error }}</p>{% endif %}
+  <div class="form-actions"><button type="submit">Create token</button></div>
+</form>
+{% else %}
+<p class="muted">Your account is managed in Keycloak. For the API, use an access token from Keycloak.</p>
+{% endif %}
+{% endblock %}

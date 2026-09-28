@@ -4,7 +4,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, Header, Query, status
 from fastapi.responses import StreamingResponse
 
-from app.api.deps import SessionDep, require
+from app.api.deps import ActorDep, SessionDep, require
 from app.api.schemas import LaunchIn, RunEventOut, RunEventsPage, RunOut
 from app.core.auth import Action, Principal
 from app.core.db import get_sessionmaker
@@ -24,6 +24,7 @@ def launch(
     body: LaunchIn,
     session: SessionDep,
     user: Annotated[Principal, Depends(require(Action.LAUNCH))],
+    actor: ActorDep,
 ) -> RunOut:
     run = runs.launch(
         session,
@@ -31,6 +32,7 @@ def launch(
         triggered_by=user.triggered_by,
         extra_vars=body.extra_vars,
         limit=body.limit,
+        actor=actor,
     )
     return RunOut.model_validate(run)
 
@@ -76,8 +78,8 @@ def list_events(
     status_code=status.HTTP_202_ACCEPTED,
     dependencies=[Depends(require(Action.CANCEL))],
 )
-def cancel(run_id: int, session: SessionDep) -> RunOut:
-    return RunOut.model_validate(runs.cancel(session, run_id))
+def cancel(run_id: int, session: SessionDep, actor: ActorDep) -> RunOut:
+    return RunOut.model_validate(runs.cancel(session, run_id, actor=actor))
 
 
 @router.get("/runs/{run_id}/stream", dependencies=READ)
