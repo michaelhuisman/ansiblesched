@@ -67,6 +67,7 @@ services:
       LAMPLIGHTER_OIDC_CLIENT_ID: lamplighter
     env_file:
       - .dev/secrets/oidc.env # LAMPLIGHTER_OIDC_CLIENT_SECRET, van scripts/dev-keys.sh
+      - .dev/secrets/metrics.env # LAMPLIGHTER_METRICS_TOKEN
     depends_on:
       migrate:
         condition: service_completed_successfully
@@ -107,6 +108,9 @@ services:
       LAMPLIGHTER_OPENBAO_ADDR: http://openbao:8200
       LAMPLIGHTER_WEBHOOK_OPENBAO_PATH: webhooks/default
       LAMPLIGHTER_WEBHOOK_CACHE_S: "5" # kort in dev, zodat de rotatietest snel is
+      # Kort in dev, zodat de reaper-test snel is.
+      LAMPLIGHTER_REAPER_INTERVAL_S: "5"
+      LAMPLIGHTER_REAPER_GRACE_S: "10"
     env_file:
       - .dev/secrets/openbao/scheduler.env # AppRole lamplighter-scheduler
     depends_on:
@@ -202,6 +206,8 @@ services:
       context: dev/ssh-target
     volumes:
       - ./.dev/secrets/ssh-target/id_ed25519.pub:/authorized_keys:ro
+      - ./.dev/secrets/ssh-target/host_ed25519_key:/host_key:ro
+      - ./.dev/secrets/ssh-target/host_ed25519_key.pub:/host_key.pub:ro
 
   # Ontvangt webhooks; tests lezen /received en kunnen fouten forceren via /fail.
   webhook-sink:

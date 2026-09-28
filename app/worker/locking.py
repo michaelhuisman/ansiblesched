@@ -30,6 +30,22 @@ class PgTemplateLocker:
     def unlock(self, template_id: int) -> None:
         locks.unlock(self._connection(), locks.NS_TEMPLATE, template_id)
 
+    def ensure(self, template_id: int) -> bool:
+        """Is de template-lock nog van ons? Bij een verbroken verbinding: opnieuw verbinden
+        en de lock opnieuw nemen. False als een andere run hem inmiddels heeft."""
+        try:
+            self._connection().execute("SELECT 1")
+            return True
+        except psycopg.Error:
+            log.warning("lock connection lost, re-acquiring template lock")
+            self.reset()
+        try:
+            return self.try_lock(template_id)
+        except psycopg.Error:
+            # Database onbereikbaar: dan kan ook niemand anders claimen. Run laten lopen.
+            log.warning("cannot re-acquire template lock, database unavailable")
+            return True
+
     def reset(self) -> None:
         """Na een fout: connectie weggooien. Daarmee vervallen ook alle locks."""
         if self._conn is not None:

@@ -17,17 +17,21 @@ from apscheduler.jobstores.sqlalchemy import SQLAlchemyJobStore
 from apscheduler.schedulers.background import BackgroundScheduler
 
 from app.core import locks
-from app.core.config import Settings
+from app.core.config import Settings, get_settings
 from app.core.db import connect_raw, get_engine, get_sessionmaker
 from app.models import JOBSTORE_TABLE
 from app.scheduler.jobs import (
     NOTIFICATIONS_INTERVAL_S,
     NOTIFICATIONS_JOB_ID,
+    REAPER_JOB_ID,
+    RETENTION_JOB_ID,
     SESSION_PURGE_INTERVAL_S,
     SESSION_PURGE_JOB_ID,
     deliver_notifications,
     purge_sessions,
+    reap_lost_runs,
     record_missed,
+    run_retention,
     schedule_id_of,
 )
 from app.scheduler.sync import reconcile
@@ -62,6 +66,26 @@ def _build_scheduler() -> BackgroundScheduler:
         "interval",
         seconds=NOTIFICATIONS_INTERVAL_S,
         id=NOTIFICATIONS_JOB_ID,
+        jobstore="internal",
+        max_instances=1,
+        coalesce=True,
+    )
+    settings = get_settings()
+    scheduler.add_job(
+        run_retention,
+        "cron",
+        hour=settings.retention_hour_utc,
+        minute=0,
+        id=RETENTION_JOB_ID,
+        jobstore="internal",
+        max_instances=1,
+        coalesce=True,
+    )
+    scheduler.add_job(
+        reap_lost_runs,
+        "interval",
+        seconds=settings.reaper_interval_s,
+        id=REAPER_JOB_ID,
         jobstore="internal",
         max_instances=1,
         coalesce=True,
@@ -118,6 +142,11 @@ def run_scheduler(settings: Settings) -> int:
     signal.signal(signal.SIGINT, _on_signal)
 
     log.info("scheduler started", extra={"worker_id": settings.worker_id})
+    if 0 < settings.retention_runs_days < settings.retention_events_days:
+        log.warning(
+            "retention_events_days is longer than retention_runs_days; events are removed"
+            " together with their run"
+        )
     while not stop.is_set():
         try:
             with connect_raw(f"scheduler:{settings.worker_id}") as conn:

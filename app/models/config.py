@@ -5,7 +5,7 @@ from sqlalchemy.orm import Mapped, mapped_column
 
 from app.models.base import Entity, JsonDict, TimestampMixin
 
-CREDENTIAL_TYPES = ("ssh_key", "vault_password", "git_token")
+CREDENTIAL_TYPES = ("ssh_key", "vault_password", "git_token", "known_hosts")
 INVENTORY_SOURCES = ("project_file", "inline")
 OVERLAP_POLICIES = ("skip", "queue")
 
@@ -72,6 +72,8 @@ class Template(TimestampMixin, Entity):
     verbosity: Mapped[int] = mapped_column(server_default="0")
     machine_credential_id: Mapped[int] = mapped_column(ForeignKey("credentials.id"))
     vault_credential_id: Mapped[int | None] = mapped_column(ForeignKey("credentials.id"))
+    # Gezet: strikte host key checking met deze known_hosts, los van de globale instelling.
+    known_hosts_credential_id: Mapped[int | None] = mapped_column(ForeignKey("credentials.id"))
     timeout_s: Mapped[int | None]
 
 

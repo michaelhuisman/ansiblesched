@@ -39,6 +39,13 @@
         {% for c in vault_credentials %}<option value="{{ c.id }}" {% if form.get('vault_credential_id')|string == c.id|string %}selected{% endif %}>{{ c.name }}</option>{% endfor %}
       </select></label>
   </div>
+  <label>Known hosts
+    <select name="known_hosts_credential_id">
+      <option value="">none (use the global host key checking setting)</option>
+      {% for c in known_hosts_credentials %}<option value="{{ c.id }}" {% if form.get('known_hosts_credential_id')|string == c.id|string %}selected{% endif %}>{{ c.name }}</option>{% endfor %}
+    </select>
+    <small class="muted">With known_hosts, SSH host keys are always checked strictly against this list.</small>
+    {% with field='known_hosts_credential_id' %}{% include "_field_error.html" %}{% endwith %}</label>
   <div class="row">
     <label>Tags <input name="tags" value="{{ form.get('tags') or '' }}"></label>
     <label>Skip tags <input name="skip_tags" value="{{ form.get('skip_tags') or '' }}"></label>

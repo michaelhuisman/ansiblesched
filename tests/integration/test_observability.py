@@ -19,6 +19,7 @@ from tests.integration.conftest import API_URL, SECRETS_DIR, Env, LocalUser, log
 
 SINK = os.environ.get("LAMPLIGHTER_IT_WEBHOOK_SINK", "http://127.0.0.1:8080")
 WEBHOOK_SECRET = (SECRETS_DIR / "webhook" / "hmac").read_text().strip()  # in OpenBao
+METRICS_AUTH = {"Authorization": f"Bearer {(SECRETS_DIR / 'metrics-token').read_text().strip()}"}
 
 
 # --- SSE -----------------------------------------------------------------------
@@ -107,13 +108,13 @@ def metric(text: str, name: str, **labels: str) -> float | None:
 def test_metrics_update_after_runs(env: Env) -> None:
     template = env.template("ping.yml")
     name = template["name"]
-    before = httpx.get(f"{API_URL}/metrics").text
+    before = httpx.get(f"{API_URL}/metrics", headers=METRICS_AUTH).text
     assert metric(before, "lamplighter_runs_total", template=name) is None
 
     env.wait(env.launch(template)["id"])
     env.wait(env.launch(template)["id"])
 
-    after = httpx.get(f"{API_URL}/metrics")
+    after = httpx.get(f"{API_URL}/metrics", headers=METRICS_AUTH)
     assert after.status_code == 200
     assert after.headers["content-type"].startswith("text/plain")
     text = after.text

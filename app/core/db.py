@@ -7,10 +7,26 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from app.core.config import get_settings
 
+# Zichtbaar in pg_stat_activity. De worker zet hier `worker:<id>`; de reaper gebruikt dat
+# om te zien of een worker nog leeft. Postgres kapt af op 63 tekens.
+_application_name = "lamplighter"
+
+
+def set_application_name(name: str) -> None:
+    """Aanroepen vóór het eerste gebruik van de engine (bij het starten van een rol)."""
+    global _application_name
+    if get_engine.cache_info().currsize:
+        raise RuntimeError("set_application_name must be called before get_engine()")
+    _application_name = name
+
 
 @lru_cache
 def get_engine() -> Engine:
-    return create_engine(get_settings().database_url, pool_pre_ping=True)
+    return create_engine(
+        get_settings().database_url,
+        pool_pre_ping=True,
+        connect_args={"application_name": _application_name},
+    )
 
 
 @lru_cache

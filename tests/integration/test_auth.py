@@ -136,7 +136,7 @@ def test_anonymous_gets_401(finished_run: dict[str, Any]) -> None:
             assert resp.headers["www-authenticate"] == "Bearer"
     # Open endpoints
     assert httpx.get(f"{API_URL}/healthz").status_code == 200
-    assert httpx.get(f"{API_URL}/metrics").status_code == 200
+    assert httpx.get(f"{API_URL}/metrics").status_code == 401  # scrape-token vereist
 
 
 @pytest.mark.parametrize(

@@ -28,6 +28,7 @@ role lamplighter-worker "$WORKER_ROLE_ID" "$WORKER_SECRET_ID"
 role lamplighter-scheduler "$SCHEDULER_ROLE_ID" "$SCHEDULER_SECRET_ID"
 
 bao kv put -mount=secret ssh/ssh-target id_ed25519=@/secrets/ssh-target/id_ed25519 >/dev/null
+bao kv put -mount=secret ssh/ssh-target-known-hosts known_hosts=@/secrets/ssh-target/known_hosts >/dev/null
 bao kv put -mount=secret vault/dev password=@/secrets/vault/password >/dev/null
 bao kv put -mount=secret git/fixtures token=@/secrets/git/token username=scheduler >/dev/null
 bao kv put -mount=secret webhooks/default urls='["http://webhook-sink:8080/hook"]' \

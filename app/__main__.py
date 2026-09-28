@@ -52,12 +52,25 @@ def _run() -> int:
     settings = get_settings()
     setup_logging(settings.log_level)
 
+    from app.core.db import set_application_name
+
+    if args.command in ROLES:
+        set_application_name(f"{args.command}:{settings.worker_id}")
+
     if args.command == "api":
         import uvicorn
 
         from app.api.main import create_app
 
-        uvicorn.run(create_app(), host=settings.api_host, port=settings.api_port, log_config=None)
+        uvicorn.run(
+            create_app(),
+            host=settings.api_host,
+            port=settings.api_port,
+            log_config=None,
+            # X-Forwarded-For/-Proto alleen van vertrouwde proxies (fase 5a).
+            proxy_headers=True,
+            forwarded_allow_ips=settings.trusted_proxies,
+        )
         return 0
     if args.command == "worker":
         from app.worker.loop import run_worker

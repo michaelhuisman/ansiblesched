@@ -4,7 +4,9 @@ api, scheduler en workers zijn losse processen (en replicas); in-process counter
 per proces verschillen. De database is de enige bron van waarheid en altijd actueel.
 """
 
+from collections import defaultdict
 from collections.abc import Iterator
+from dataclasses import dataclass, field
 
 from prometheus_client import CollectorRegistry
 from prometheus_client.core import (
@@ -17,7 +19,7 @@ from prometheus_client.registry import Collector
 from sqlalchemy import text
 from sqlalchemy.orm import Session, sessionmaker
 
-DURATION_BUCKETS = (1, 5, 10, 30, 60, 120, 300, 600, 1800, 3600)
+from app.services.retention import DURATION_BUCKETS
 
 _RUNS_BY_STATUS = text(
     "SELECT t.name AS template, r.status, count(*) AS n"
@@ -41,12 +43,25 @@ _QUEUE = text(
     " count(*) FILTER (WHERE status = 'running') AS running FROM runs"
 )
 
+# Tellingen van runs die de retentie al heeft verwijderd.
+_ARCHIVE = text(
+    "SELECT template, status, runs, duration_count, duration_sum, duration_buckets"
+    " FROM run_stats_archive"
+)
+
 _LAST_SUCCESS = text(
     "SELECT r.schedule_id, t.name AS template, extract(epoch FROM max(r.finished_at)) AS ts"
     " FROM runs r JOIN templates t ON t.id = r.template_id"
     " WHERE r.schedule_id IS NOT NULL AND r.status = 'successful'"
     " GROUP BY r.schedule_id, t.name"
 )
+
+
+@dataclass
+class _Histogram:
+    count: int = 0
+    total: float = 0.0
+    buckets: dict[int, int] = field(default_factory=lambda: dict.fromkeys(DURATION_BUCKETS, 0))
 
 
 class RunMetricsCollector(Collector):
@@ -59,12 +74,32 @@ class RunMetricsCollector(Collector):
             durations = session.execute(_DURATIONS).all()
             queue = session.execute(_QUEUE).one()
             last_success = session.execute(_LAST_SUCCESS).all()
+            archive = session.execute(_ARCHIVE).all()
+
+        # Live runs + archief, zodat retentie de counters niet laat dalen.
+        counts: dict[tuple[str, str], int] = defaultdict(int)
+        hists: dict[str, _Histogram] = defaultdict(_Histogram)
+        for row in by_status:
+            counts[(row.template, row.status)] += row.n
+        for row in durations:
+            h = hists[row.template]
+            h.count += row.n
+            h.total += float(row.total)
+            for b in DURATION_BUCKETS:
+                h.buckets[b] += getattr(row, f"le_{b}")
+        for row in archive:
+            counts[(row.template, row.status)] += row.runs
+            h = hists[row.template]
+            h.count += row.duration_count
+            h.total += float(row.duration_sum)
+            for b in DURATION_BUCKETS:
+                h.buckets[b] += int((row.duration_buckets or {}).get(str(b), 0))
 
         runs = CounterMetricFamily(
             "lamplighter_runs", "Runs per template and status", labels=["template", "status"]
         )
-        for row in by_status:
-            runs.add_metric([row.template, row.status], row.n)
+        for (template, status), n in sorted(counts.items()):
+            runs.add_metric([template, status], n)
         yield runs
 
         hist = HistogramMetricFamily(
@@ -72,10 +107,10 @@ class RunMetricsCollector(Collector):
             "Duration of finished runs",
             labels=["template"],
         )
-        for row in durations:
-            buckets = [(str(float(b)), getattr(row, f"le_{b}")) for b in DURATION_BUCKETS]
-            buckets.append(("+Inf", row.n))
-            hist.add_metric([row.template], buckets, sum_value=float(row.total))
+        for template, h in sorted(hists.items()):
+            buckets = [(str(float(b)), h.buckets[b]) for b in DURATION_BUCKETS]
+            buckets.append(("+Inf", h.count))
+            hist.add_metric([template], buckets, sum_value=h.total)
         yield hist
 
         depth = GaugeMetricFamily("lamplighter_queue_depth", "Runs waiting in the queue")

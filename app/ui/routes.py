@@ -101,6 +101,7 @@ def _template_choices(session: SessionDep) -> dict[str, Any]:
         "inventories": crud.list_all(session, Inventory),
         "ssh_credentials": [c for c in creds if c.type == "ssh_key"],
         "vault_credentials": [c for c in creds if c.type == "vault_password"],
+        "known_hosts_credentials": [c for c in creds if c.type == "known_hosts"],
     }
 
 

@@ -243,6 +243,15 @@ GET   /ui/...                           server-rendered UI (Jinja2 + htmx)
 | `LAMPLIGHTER_OPENBAO_CA_CERT` | — (systeem-CA's)               |
 | `LAMPLIGHTER_OIDC_ISSUER`     | — (leeg = alleen lokale login) |
 | `LAMPLIGHTER_OIDC_AUDIENCE`   | — (default: client-id)         |
+| `LAMPLIGHTER_TRUSTED_PROXIES` | `127.0.0.1` (IP's/CIDR's, komma-gescheiden) |
+| `LAMPLIGHTER_METRICS_TOKEN`   | — (leeg = `/metrics` open)     |
+| `LAMPLIGHTER_RETENTION_EVENTS_DAYS` | `30` (0 = nooit)         |
+| `LAMPLIGHTER_RETENTION_RUNS_DAYS`   | `180` (0 = nooit)        |
+| `LAMPLIGHTER_RETENTION_AUDIT_DAYS`  | `365` (0 = nooit)        |
+| `LAMPLIGHTER_RETENTION_TOKENS_DAYS` | `30` (0 = nooit)         |
+| `LAMPLIGHTER_RETENTION_HOUR_UTC`    | `3`                      |
+| `LAMPLIGHTER_REAPER_GRACE_S`  | `120`                          |
+| `LAMPLIGHTER_REAPER_INTERVAL_S` | `60`                         |
 
 ## Dev-omgeving (`compose.dev.yml`)
 
@@ -408,6 +417,47 @@ Harbor), een Ansible-rol `deploy/roles/lamplighter`, een retentie-job voor
 `run_events` en oude runs, een backup van Postgres (`pg_dump`) en TLS via een reverse
 proxy.
 
+_Geleverd in twee delen: **5a** hardening van de app, **5b** productie en deploy._
+
+**Uitwerking 5a**
+- **Retentie:** een dagelijkse interne job van de scheduler-leider
+  (`LAMPLIGHTER_RETENTION_HOUR_UTC`), met een eigen advisory lock. Wat weg mag:
+  - events van afgeronde runs
+  - afgeronde runs, met cascade naar events en notificaties
+  - de audit log
+  - ingetrokken of verlopen API-tokens
+
+  Alle termijnen zijn instelbaar, en `0` betekent nooit. Er wordt in batches van 5.000
+  verwijderd. Lopende en wachtende runs blijven altijd staan.
+- **Metrics na retentie:** vóór het verwijderen worden de tellingen per template en status
+  (runs, duur, buckets) opgeteld in `run_stats_archive`, in dezelfde transactie.
+  `lamplighter_runs_total` en het duur-histogram zijn live plus archief, dus Prometheus
+  ziet geen counter-reset.
+- **Reaper:** een run op `running` zonder databaseverbinding met
+  `application_name = worker:<worker_id>` wordt na `LAMPLIGHTER_REAPER_GRACE_S`
+  `error`, met de reden "worker lost" en een notificatie. Alle connecties van een rol
+  hebben daarvoor `application_name = <rol>:<id>`.
+- **Lock-connectie van de worker:** de `cancel_callback` controleert elke 5s de
+  overlap-lock. Na een verbroken verbinding neemt de worker hem opnieuw. Lukt dat niet,
+  omdat een andere run hem heeft, dan wordt de run `error` met de reden "overlap lock
+  lost".
+- **Proxy:** uvicorn met `proxy_headers` en `forwarded_allow_ips =
+  LAMPLIGHTER_TRUSTED_PROXIES`. Audit en lockout zien zo het echte client-IP, en een
+  vervalste `X-Forwarded-For` van een onbekende client wordt genegeerd.
+- **`/metrics`:** met `LAMPLIGHTER_METRICS_TOKEN` is `Authorization: Bearer <token>`
+  verplicht.
+- **Host keys:**
+  - Een `known_hosts`-credential (`ssh/<naam>`, key `known_hosts`) op een template dwingt
+    strikte checking af: `StrictHostKeyChecking=yes` met een eigen `UserKnownHostsFile`.
+  - Zonder `known_hosts` geldt `LAMPLIGHTER_ANSIBLE_HOST_KEY_CHECKING`. Staat die aan,
+    dan wordt de run meteen geweigerd.
+  - Elke run krijgt een eigen SSH-`ControlPath` (`ANSIBLE_SSH_CONTROL_PATH_DIR` in de
+    private data dir). Anders zou een run via `ControlPersist` een masterverbinding van
+    een andere run hergebruiken, en daarmee de host-key-controle omzeilen. De test voor
+    een verkeerde host key liet dat zien.
+- **Statische bestanden:** URL's krijgen een inhoudsversie (`?v=<hash>`), zodat browsers
+  na een update niet uit hun cache blijven laden.
+
 **Acceptatiecriteria**
 - Een verse LXC/VM komt met één playbook-run van de rol volledig op, met een groene
   healthcheck.
@@ -427,34 +477,15 @@ proxy.
 - **Rolwijzigingen in Keycloak** gelden pas bij de volgende login: de sessie bewaart een
   snapshot, en die blijft maximaal 24 uur geldig. Bearer-tokens volgen direct, want ze
   leven maar 5 minuten.
-- **Client-IP achter een proxy (fase 5):** audit en lockout gebruiken nu het
-  socket-adres. Achter de reverse proxy moet `X-Forwarded-For` alleen van een vertrouwde
-  hop worden overgenomen.
-- **`/metrics`, `/healthz` en `/readyz` zijn open.** Afschermen via het netwerk of de
-  proxy (fase 5), of een scrape-token.
+- **`/healthz` en `/readyz` zijn open** (bedoeld voor load balancer en healthchecks).
+  `/metrics` heeft sinds 5a een optioneel scrape-token; afschermen via de proxy komt in 5b.
 - **Lockout per gebruikersnaam:** voorkomt brute force op één account. Een aanvaller kan
   daarmee wel een account tijdelijk blokkeren. Een rate limit per IP komt er in fase 5
   bij, via de proxy.
-- **Metrics en retentie (fase 5):** `lamplighter_runs_total` wordt uit de runs-tabel geteld.
-  Retentie laat de waarde dalen, wat Prometheus als counter-reset ziet. Oplossing: een
-  aggregatietabel bijhouden of de metric als gauge exposen.
 - **UI op smalle schermen:** de tabellen zijn voor desktop gemaakt en scrollen op een
   telefoon niet netjes.
-- **Lock-connectie van de worker valt weg tijdens een run:** de template-lock is dan weg,
-  terwijl de run doorloopt. Een tweede run van hetzelfde template kan dan starten.
-  Oplossing: de lock-connectie controleren in de cancel_callback en bij verlies de run
-  afbreken, of accepteren (fase 5).
 - **Failover-test met kill:** `scripts/it-failover.sh` draait op de host. Opnemen in CI
   (fase 5).
-- **Runs van verdwenen workers:** een worker zet bij het opstarten alleen zijn eigen
-  `running` runs op `error`. Met een willekeurige container-hostname als `worker_id`
-  blijven runs van een gecrashte, niet-herstarte worker op `running` staan. Sinds
-  fase 2 blokkeren ze de overlap niet meer, want die kijkt naar `pg_locks` en de lock
-  verdwijnt met de connectie. Ze blijven wel als `running` zichtbaar. Nodig: een
-  reaper die `running` runs zonder template-lock op `error` zet (fase 5).
-- **Host key checking in productie:** in dev staat het uit. Voor productie is een
-  known_hosts-beheer nodig (per inventory of project), anders falen runs of moet
-  checking uit (fase 4 of 5).
 - **Remote processen bij cancel/timeout:** ansible-runner stopt het lokale
   ansible-proces; een lopend commando op de target (bv. `sleep`) loopt daar door.
 - **Secret-id's van AppRoles** staan nu als env-bestand op de host. Beter: response

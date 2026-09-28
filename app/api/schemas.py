@@ -31,7 +31,7 @@ class OrmModel(BaseModel):
 
 class CredentialIn(BaseModel):
     name: Name
-    type: Literal["ssh_key", "vault_password", "git_token"]
+    type: Literal["ssh_key", "vault_password", "git_token", "known_hosts"]
     openbao_path: NonEmpty
     openbao_key: NonEmpty
 
@@ -103,6 +103,7 @@ class TemplateIn(BaseModel):
     verbosity: int = Field(default=0, ge=0, le=5)
     machine_credential_id: int
     vault_credential_id: int | None = None
+    known_hosts_credential_id: int | None = None
     timeout_s: int | None = Field(default=None, gt=0)
 
 
