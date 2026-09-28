@@ -1,0 +1,9 @@
+# Meerdere stappen met pauzes: output komt geleidelijk binnen (live log in de UI).
+- name: Step by step
+  hosts: all
+  gather_facts: false
+  tasks:
+    - name: Step
+      ansible.builtin.shell: "sleep {{ step_s | default(2) }} && echo step {{ item }} done"
+      loop: [1, 2, 3, 4, 5]
+      changed_when: item == 3

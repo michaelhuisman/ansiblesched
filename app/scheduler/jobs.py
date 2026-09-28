@@ -4,9 +4,12 @@ module en namen niet verplaatsen."""
 import logging
 from datetime import UTC, datetime, timedelta
 
+import httpx
+
+from app.core.config import get_settings
 from app.core.db import get_sessionmaker
 from app.scheduler.trigger import build_trigger, latest_fire_time
-from app.services import schedules
+from app.services import notifications, schedules
 
 log = logging.getLogger(__name__)
 
@@ -72,3 +75,20 @@ def record_missed(schedule_id: int, scheduled_for: datetime) -> None:
             "scheduled_for": scheduled_for.isoformat(),
         },
     )
+
+
+NOTIFICATIONS_JOB_ID = "internal:notifications"
+NOTIFICATIONS_INTERVAL_S = 5
+
+
+def deliver_notifications() -> None:
+    settings = get_settings()
+    secret = settings.webhook_secret.get_secret_value() if settings.webhook_secret else None
+    with httpx.Client(follow_redirects=False) as client, get_sessionmaker()() as session:
+        notifications.deliver_due(
+            session,
+            client,
+            urls=notifications.targets(settings.webhook_urls),
+            public_url=settings.public_url,
+            secret=secret,
+        )

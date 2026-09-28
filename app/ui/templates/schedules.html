@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+{% block title %}Schedules · ansible-scheduler{% endblock %}
+{% block content %}
+<div class="page-head">
+  <h1>Schedules</h1>
+  {% if user.can(Action.CONFIGURE) %}<a class="button" href="/ui/schedules/new">Nieuwe schedule</a>{% endif %}
+</div>
+<table class="grid">
+  <thead><tr><th>#</th><th>Template</th><th>Cron</th><th>Tijdzone</th><th>Overlap</th><th>Volgende run (UTC)</th><th>Actief</th><th></th></tr></thead>
+  <tbody>
+  {% for s in schedules %}{% include "_schedule_row.html" %}{% else %}
+    <tr><td colspan="8" class="empty">Nog geen schedules.</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% endblock %}

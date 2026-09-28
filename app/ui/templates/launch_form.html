@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+{% block title %}Launch {{ item.name }} · ansible-scheduler{% endblock %}
+{% block content %}
+<div class="page-head">
+  <h1>Launch <span class="muted">· {{ item.name }}</span></h1>
+  <a class="button secondary" href="/ui/templates">Annuleren</a>
+</div>
+<form class="card form" method="post" action="/ui/templates/{{ item.id }}/launch">
+  <p class="muted">Playbook <span class="mono">{{ item.playbook_path }}</span>.
+    Extra vars worden samengevoegd met die van het template{% if item.extra_vars %} (<span class="mono">{{ item.extra_vars | tojson }}</span>){% endif %}.</p>
+  <label>Extra vars (JSON)
+    <textarea name="extra_vars" rows="4" class="mono" placeholder='{"key": "value"}'>{{ form.get('extra_vars') or '' }}</textarea>
+    {% with field='extra_vars' %}{% include "_field_error.html" %}{% endwith %}</label>
+  <label>Limit <input name="limit" value="{{ form.get('limit') or '' }}" placeholder="{{ item.limit or 'alle hosts' }}"></label>
+  <div class="form-actions"><button type="submit">Launch</button></div>
+</form>
+{% endblock %}

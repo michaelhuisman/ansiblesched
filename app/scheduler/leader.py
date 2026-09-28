@@ -12,6 +12,7 @@ from types import FrameType
 
 import psycopg
 from apscheduler.events import EVENT_JOB_MISSED, JobExecutionEvent
+from apscheduler.jobstores.memory import MemoryJobStore
 from apscheduler.jobstores.sqlalchemy import SQLAlchemyJobStore
 from apscheduler.schedulers.background import BackgroundScheduler
 
@@ -19,7 +20,13 @@ from app.core import locks
 from app.core.config import Settings
 from app.core.db import connect_raw, get_engine, get_sessionmaker
 from app.models import JOBSTORE_TABLE
-from app.scheduler.jobs import record_missed, schedule_id_of
+from app.scheduler.jobs import (
+    NOTIFICATIONS_INTERVAL_S,
+    NOTIFICATIONS_JOB_ID,
+    deliver_notifications,
+    record_missed,
+    schedule_id_of,
+)
 from app.scheduler.sync import reconcile
 from app.services import schedules
 
@@ -38,11 +45,24 @@ def _on_missed(event: JobExecutionEvent) -> None:
 
 def _build_scheduler() -> BackgroundScheduler:
     scheduler = BackgroundScheduler(
-        jobstores={"default": SQLAlchemyJobStore(engine=get_engine(), tablename=JOBSTORE_TABLE)},
+        jobstores={
+            "default": SQLAlchemyJobStore(engine=get_engine(), tablename=JOBSTORE_TABLE),
+            # Interne jobs van de leider; niet persistent, niet door de reconcile beheerd.
+            "internal": MemoryJobStore(),
+        },
         job_defaults={"coalesce": True, "max_instances": 1},
         timezone="UTC",
     )
     scheduler.add_listener(_on_missed, EVENT_JOB_MISSED)
+    scheduler.add_job(
+        deliver_notifications,
+        "interval",
+        seconds=NOTIFICATIONS_INTERVAL_S,
+        id=NOTIFICATIONS_JOB_ID,
+        jobstore="internal",
+        max_instances=1,
+        coalesce=True,
+    )
     return scheduler
 
 

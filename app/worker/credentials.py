@@ -22,7 +22,7 @@ class CredentialResolver(Protocol):
 
 
 class DevFileResolver:
-    """Fase 1: leest `<base_dir>/<openbao_path>/<openbao_key>`. Wordt in fase 3
+    """Fase 1: leest `<base_dir>/<openbao_path>/<openbao_key>`. Wordt in fase 4
     vervangen door een OpenBao-resolver met dezelfde interface."""
 
     def __init__(self, base_dir: Path) -> None:

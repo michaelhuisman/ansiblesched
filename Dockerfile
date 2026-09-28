@@ -25,6 +25,9 @@ RUN pip install -r requirements.txt
 COPY alembic.ini ./
 COPY migrations ./migrations
 COPY app ./app
+# Bestanden die in de dev-container zijn aangemaakt (bv. Alembic-revisies) kunnen via de
+# virtiofs-mount op de host 0600 zijn; het image moet ze als 'app' kunnen lezen.
+RUN chmod -R a+rX /app
 
 USER app
 ENTRYPOINT ["tini", "--", "python", "-m", "app"]

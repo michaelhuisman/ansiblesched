@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% block title %}Runs · ansible-scheduler{% endblock %}
+{% block content %}
+<div class="page-head">
+  <h1>Runs</h1>
+  <form id="filters" class="filters" hx-get="/ui/runs" hx-target="#runs-table" hx-trigger="change" hx-push-url="true">
+    <label>Template
+      <select name="template_id">
+        <option value="">Alle</option>
+        {% for tid, name in template_names | dictsort(by='value') %}
+          <option value="{{ tid }}" {% if tid == template_id %}selected{% endif %}>{{ name }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label>Status
+      <select name="status">
+        <option value="">Alle</option>
+        {% for s in ['queued', 'running', 'successful', 'failed', 'error', 'timeout', 'canceled', 'skipped'] %}
+          <option value="{{ s }}" {% if status == s %}selected{% endif %}>{{ s }}</option>
+        {% endfor %}
+      </select>
+    </label>
+  </form>
+</div>
+<div id="runs-table" hx-get="/ui/runs" hx-include="#filters" hx-trigger="every 3s">
+  {% include "_runs_table.html" %}
+</div>
+{% endblock %}

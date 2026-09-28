@@ -14,7 +14,7 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from app.core.config import Settings
 from app.models import Credential, Inventory, Project, Run, RunStatus, Template
-from app.services import queue
+from app.services import notifications, queue
 from app.services.events import SecretMasker, filter_event
 from app.worker.credentials import CredentialError, CredentialRef, CredentialResolver
 from app.worker.git import RepoCache
@@ -22,6 +22,8 @@ from app.worker.git import RepoCache
 log = logging.getLogger(__name__)
 
 EVENT_BATCH_SIZE = 50
+# Melding van ssh-add (via ansible-runner): bevat het interne pad en de key-comment.
+_SSH_AGENT_NOISE = "Identity added: "
 EVENT_FLUSH_INTERVAL_S = 1.0
 CANCEL_CHECK_INTERVAL_S = 1.0
 
@@ -125,6 +127,10 @@ class EventSink:
     def handle(self, raw: Mapping[str, Any]) -> bool:
         if raw.get("event") == "playbook_on_stats":
             self.stats = _normalize_stats(raw.get("event_data"))
+        if raw.get("event") == "verbose" and str(raw.get("stdout", "")).startswith(
+            _SSH_AGENT_NOISE
+        ):
+            return False
         event = filter_event(raw, self._masker)
         if event is not None:
             self._buffer.append(event.as_row(self._run_id))
@@ -233,7 +239,15 @@ class Executor:
                 except Exception:
                     log.warning("worktree prune failed", exc_info=True)
             with self._sm() as session:
-                queue.finish(session, run_id, status=status, rc=rc, stats=stats, reason=reason)
+                queue.finish(
+                    session,
+                    run_id,
+                    status=status,
+                    rc=rc,
+                    stats=stats,
+                    reason=reason,
+                    notify_targets=list(notifications.targets(self._settings.webhook_urls)),
+                )
             log.info("run finished", extra={"run_id": run_id, "status": status, "rc": rc})
         return status
 
