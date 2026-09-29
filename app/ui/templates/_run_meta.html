@@ -17,8 +17,8 @@
     {% set hosts = [] %}
     {% for counts in run.stats.values() %}{% for h in counts %}{% if h not in hosts %}{% set _ = hosts.append(h) %}{% endif %}{% endfor %}{% endfor %}
     {% if hosts %}
-    <table class="grid stats">
-      <thead><tr><th>Host</th>{% for k in ['ok', 'changed', 'failed', 'unreachable', 'skipped', 'rescued', 'ignored'] %}<th>{{ k }}</th>{% endfor %}</tr></thead>
+    <div class="stats-wrap"><table class="grid stats">
+      <thead><tr><th>Host</th>{% for k in ['ok', 'changed', 'failed', 'unreachable', 'skipped', 'rescued', 'ignored'] %}<th class="num">{{ k }}</th>{% endfor %}</tr></thead>
       <tbody>
       {% for h in hosts | sort %}
         <tr><td class="mono">{{ h }}</td>
@@ -28,7 +28,7 @@
         {% endfor %}</tr>
       {% endfor %}
       </tbody>
-    </table>
+    </table></div>
     {% endif %}
   {% endif %}
   {% if run.status not in FINAL_STATUSES and user.can(Action.CANCEL) and not run.cancel_requested_at %}

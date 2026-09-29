@@ -44,10 +44,19 @@ table.grid { width: 100%; border-collapse: collapse; background: var(--surface);
 .grid tr:last-child td { border-bottom: none; }
 .grid td.actions { text-align: right; white-space: nowrap; }
 .grid td.num { text-align: right; font-family: var(--mono); }
+/* Headers of number columns align with their numbers. */
+.grid th.num { text-align: right; }
 .grid td.bad { color: var(--danger); font-weight: 700; }
 .grid td.warn { color: var(--warn); font-weight: 700; }
 .grid .empty { text-align: center; color: var(--muted); padding: 24px; }
-table.stats { margin: 12px 0; }
+/* Host takes the rest; the seven counters get equal, centred columns. Too narrow a
+   screen scrolls the table instead of letting the headers overlap. */
+.stats-wrap { overflow-x: auto; margin: 12px 0; }
+table.stats { table-layout: fixed; min-width: 760px; }
+table.stats th.num, table.stats td.num { width: 11%; padding-left: 4px; padding-right: 4px;
+  text-align: center; }
+table.stats th.num { letter-spacing: .01em; }
+table.stats td:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 .badge { display: inline-block; padding: 1px 8px; border-radius: 999px; font-size: 12px;
   font-weight: 600; border: 1px solid transparent; }
