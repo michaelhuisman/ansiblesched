@@ -1,0 +1,49 @@
+---
+argument_specs:
+  main:
+    short_description: Deploy lamplighter with Docker Compose
+    description:
+      - Requires Docker Engine with the compose plugin and systemd on the host.
+      - Secrets belong in ansible-vault. See deploy/inventory/example.
+    options:
+      lamplighter_image: {type: str}
+      lamplighter_image_tag:
+        type: str
+        required: true
+        description: Immutable image tag, preferably the full git SHA.
+      lamplighter_pull: {type: str, choices: [missing, always, never]}
+      lamplighter_registry: {type: str}
+      lamplighter_registry_username: {type: str}
+      lamplighter_registry_password: {type: str, no_log: true}
+      lamplighter_dir: {type: path}
+      lamplighter_project_name: {type: str}
+      lamplighter_api_bind: {type: str}
+      lamplighter_network_subnet: {type: str}
+      lamplighter_network_gateway: {type: str}
+      lamplighter_external_networks: {type: list, elements: str}
+      lamplighter_public_url: {type: str, required: true}
+      lamplighter_log_level: {type: str, choices: [DEBUG, INFO, WARNING, ERROR]}
+      lamplighter_trusted_proxies: {type: str}
+      lamplighter_scheduler_replicas: {type: int}
+      lamplighter_worker_stop_grace: {type: str}
+      lamplighter_runtime_tmpfs_size: {type: str}
+      lamplighter_settings: {type: dict}
+      lamplighter_postgres_password: {type: str, required: true, no_log: true}
+      lamplighter_metrics_token: {type: str, no_log: true}
+      lamplighter_openbao_addr: {type: str}
+      lamplighter_openbao_ca_cert: {type: str}
+      lamplighter_worker_openbao_role_id: {type: str, no_log: true}
+      lamplighter_worker_openbao_secret_id: {type: str, no_log: true}
+      lamplighter_scheduler_openbao_role_id: {type: str, no_log: true}
+      lamplighter_scheduler_openbao_secret_id: {type: str, no_log: true}
+      lamplighter_webhook_openbao_path: {type: str}
+      lamplighter_oidc_issuer: {type: str}
+      lamplighter_oidc_discovery_url: {type: str}
+      lamplighter_oidc_client_id: {type: str}
+      lamplighter_oidc_client_secret: {type: str, no_log: true}
+      lamplighter_oidc_audience: {type: str}
+      lamplighter_postgres_image: {type: str}
+      lamplighter_backup_enabled: {type: bool}
+      lamplighter_backup_time: {type: str}
+      lamplighter_backup_keep_days: {type: int}
+      lamplighter_backup_post_command: {type: str}

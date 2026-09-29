@@ -37,6 +37,10 @@ def _duration_row() -> SimpleNamespace:
 
 
 ARCHIVE: list[SimpleNamespace] = []
+MAINTENANCE = [
+    SimpleNamespace(task="retention", last_status="ok", success_ts=1790000000.0),
+    SimpleNamespace(task="backup", last_status="failed", success_ts=None),
+]
 
 
 def _registry_output() -> str:
@@ -49,6 +53,7 @@ def _registry_output() -> str:
         [SimpleNamespace(queued=4, running=1)],
         [SimpleNamespace(schedule_id=7, template="backup", ts=1790000000.0)],
         ARCHIVE,
+        MAINTENANCE,
     ]
 
     @contextmanager
@@ -122,3 +127,14 @@ def test_archive_only_template_still_reported(monkeypatch: pytest.MonkeyPatch) -
     monkeypatch.setattr(sys.modules[__name__], "ARCHIVE", [gone])
     out = _registry_output()
     assert 'lamplighter_runs_total{status="failed",template="deleted-template"} 3.0' in out
+
+
+def test_maintenance_status() -> None:
+    out = _registry_output()
+    assert (
+        'lamplighter_maintenance_last_success_timestamp_seconds{task="retention"} 1.79e+09' in out
+    )
+    # Never succeeded: no success timestamp, but the failure is visible.
+    assert 'lamplighter_maintenance_last_success_timestamp_seconds{task="backup"}' not in out
+    assert 'lamplighter_maintenance_last_attempt_failed{task="backup"} 1.0' in out
+    assert 'lamplighter_maintenance_last_attempt_failed{task="retention"} 0.0' in out

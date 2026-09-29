@@ -1,0 +1,63 @@
+---
+# --- image -------------------------------------------------------------------------
+lamplighter_image: ghcr.io/michaelhuisman/lamplighter
+# Required, no default: an immutable tag, preferably the git SHA (never `latest`).
+# lamplighter_image_tag:
+# missing: pull only unknown tags (tags are immutable) | always | never (preloaded image)
+lamplighter_pull: missing
+# Optional login for a private registry, e.g. GHCR with a `read:packages` token.
+lamplighter_registry: ghcr.io
+lamplighter_registry_username: ""
+lamplighter_registry_password: ""
+
+# --- host --------------------------------------------------------------------------
+lamplighter_dir: /opt/lamplighter
+lamplighter_project_name: lamplighter
+# The api only listens on the host; the reverse proxy (nginx) connects here.
+lamplighter_api_bind: 127.0.0.1:8000
+# Fixed subnet for the compose network, so the proxy address is predictable: requests
+# via the published port arrive from the gateway of this network.
+lamplighter_network_subnet: 172.30.117.0/24
+lamplighter_network_gateway: 172.30.117.1
+# Existing Docker networks that scheduler and workers also join (rarely needed).
+lamplighter_external_networks: []
+
+# --- application -------------------------------------------------------------------
+# lamplighter_public_url: https://lamplighter.example.org   (required)
+lamplighter_log_level: INFO
+lamplighter_trusted_proxies: "{{ lamplighter_network_gateway }}"
+lamplighter_scheduler_replicas: 1
+# A worker finishes its current run on an update or stop; this is the maximum wait.
+lamplighter_worker_stop_grace: 1h
+lamplighter_runtime_tmpfs_size: 1g
+# Any other setting as LAMPLIGHTER_<NAME>, e.g. {retention_runs_days: 365}.
+lamplighter_settings: {}
+
+# --- secrets (from ansible-vault) --------------------------------------------------
+# lamplighter_postgres_password:   (required)
+lamplighter_metrics_token: ""
+lamplighter_openbao_addr: ""
+lamplighter_openbao_ca_cert: ""
+lamplighter_worker_openbao_role_id: ""
+lamplighter_worker_openbao_secret_id: ""
+lamplighter_scheduler_openbao_role_id: ""
+lamplighter_scheduler_openbao_secret_id: ""
+lamplighter_webhook_openbao_path: ""
+lamplighter_oidc_issuer: ""
+lamplighter_oidc_discovery_url: ""
+lamplighter_oidc_client_id: lamplighter
+lamplighter_oidc_client_secret: ""
+lamplighter_oidc_audience: ""
+
+# --- postgres ----------------------------------------------------------------------
+lamplighter_postgres_image: docker.io/library/postgres:18.6
+
+# --- backup ------------------------------------------------------------------------
+lamplighter_backup_enabled: true
+# Daily, UTC (HH:MM). Before retention (default 03:00 UTC), so the dump still has it all.
+lamplighter_backup_time: "02:30"
+# 0 = keep forever.
+lamplighter_backup_keep_days: 14
+# Optional shell command after a successful dump, e.g. an offsite copy. Runs on the
+# host as root with BACKUP_FILE set to the new dump.
+lamplighter_backup_post_command: ""

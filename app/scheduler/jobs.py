@@ -3,6 +3,7 @@ do not move the module or rename them."""
 
 import logging
 import time
+from dataclasses import asdict
 from datetime import UTC, datetime, timedelta
 
 import httpx
@@ -12,7 +13,7 @@ from app.core.config import get_settings
 from app.core.db import connect_raw, get_sessionmaker
 from app.core.openbao import OpenBaoError, get_openbao
 from app.scheduler.trigger import build_trigger, latest_fire_time
-from app.services import notifications, reaper, retention, schedules, sessions
+from app.services import maintenance, notifications, reaper, retention, schedules, sessions
 
 log = logging.getLogger(__name__)
 
@@ -147,6 +148,7 @@ def purge_sessions() -> None:
 
 
 RETENTION_JOB_ID = "internal:retention"
+RETENTION_TASK = "retention"
 REAPER_JOB_ID = "internal:reaper"
 
 
@@ -159,13 +161,20 @@ def run_retention() -> None:
             log.info("retention already running elsewhere")
             return
         with get_sessionmaker()() as session:
-            retention.run_all(
-                session,
-                events_days=settings.retention_events_days,
-                runs_days=settings.retention_runs_days,
-                audit_days=settings.retention_audit_days,
-                tokens_days=settings.retention_tokens_days,
-            )
+            try:
+                result = retention.run_all(
+                    session,
+                    events_days=settings.retention_events_days,
+                    runs_days=settings.retention_runs_days,
+                    audit_days=settings.retention_audit_days,
+                    tokens_days=settings.retention_tokens_days,
+                )
+            except Exception as exc:
+                session.rollback()
+                # Only the exception type: messages can contain SQL parameters.
+                maintenance.record(session, RETENTION_TASK, ok=False, error=type(exc).__name__)
+                raise
+            maintenance.record(session, RETENTION_TASK, ok=True, details=asdict(result))
 
 
 def reap_lost_runs() -> None:

@@ -1,0 +1,30 @@
+---
+# Pass the tag per deploy: -e lamplighter_image_tag=<git-sha>
+lamplighter_public_url: https://lamplighter.example.org
+lamplighter_openbao_addr: https://openbao.example.org:8200
+lamplighter_webhook_openbao_path: webhooks/default
+
+# Keycloak (optional; without an issuer only local users can sign in).
+lamplighter_oidc_issuer: https://keycloak.example.org/realms/example
+lamplighter_oidc_client_id: lamplighter
+
+# Other settings, as LAMPLIGHTER_<NAME>.
+lamplighter_settings:
+  retention_runs_days: 365
+  retention_hour_utc: 3
+
+lamplighter_backup_time: "02:30"
+lamplighter_backup_keep_days: 14
+# lamplighter_backup_post_command: rclone copy "$BACKUP_FILE" offsite:lamplighter/
+
+# Secrets from vault.yml (encrypt it: ansible-vault encrypt vault.yml).
+lamplighter_postgres_password: "{{ vault_lamplighter_postgres_password }}"
+lamplighter_metrics_token: "{{ vault_lamplighter_metrics_token }}"
+lamplighter_oidc_client_secret: "{{ vault_lamplighter_oidc_client_secret }}"
+lamplighter_worker_openbao_role_id: "{{ vault_lamplighter_worker_openbao_role_id }}"
+lamplighter_worker_openbao_secret_id: "{{ vault_lamplighter_worker_openbao_secret_id }}"
+lamplighter_scheduler_openbao_role_id: "{{ vault_lamplighter_scheduler_openbao_role_id }}"
+lamplighter_scheduler_openbao_secret_id: "{{ vault_lamplighter_scheduler_openbao_secret_id }}"
+# While the GHCR package is private: a token with read:packages.
+# lamplighter_registry_username: michaelhuisman
+# lamplighter_registry_password: "{{ vault_lamplighter_registry_password }}"

@@ -1,0 +1,9 @@
+#!/bin/sh
+# {{ ansible_managed }}
+# Runs after a successful dump, with BACKUP_FILE set (lamplighter_backup_post_command).
+set -eu
+{% if lamplighter_backup_post_command %}
+{{ lamplighter_backup_post_command }}
+{% else %}
+: "no post-backup command configured"
+{% endif %}

@@ -1,0 +1,58 @@
+---
+- name: Check that Docker Engine with the compose plugin is installed
+  ansible.builtin.command: docker compose version --short
+  register: lamplighter_compose_version
+  changed_when: false
+  failed_when: false
+
+- name: Fail without Docker compose
+  ansible.builtin.assert:
+    that: lamplighter_compose_version.rc == 0
+    fail_msg: >-
+      Docker Engine with the compose plugin is required on {{ inventory_hostname }}
+      (https://docs.docker.com/engine/install/). The role does not install it.
+    quiet: true
+
+- name: Check the image tag
+  ansible.builtin.assert:
+    that: lamplighter_image_tag != 'latest'
+    fail_msg: Use an immutable tag (the git SHA), not `latest`.
+    quiet: true
+
+- name: Check the backup settings
+  ansible.builtin.assert:
+    that:
+      - not lamplighter_backup_enabled or ansible_facts.service_mgr == 'systemd'
+      - lamplighter_backup_time is match('^([01][0-9]|2[0-3]):[0-5][0-9]$')
+    fail_msg: The backup needs systemd, and lamplighter_backup_time must be HH:MM (UTC).
+    quiet: true
+
+- name: Check OpenBao AppRole credentials
+  ansible.builtin.assert:
+    that:
+      - lamplighter_worker_openbao_role_id | length > 0
+      - lamplighter_worker_openbao_secret_id | length > 0
+      - lamplighter_scheduler_openbao_role_id | length > 0
+      - lamplighter_scheduler_openbao_secret_id | length > 0
+    fail_msg: With lamplighter_openbao_addr set, all four AppRole ids are required.
+    quiet: true
+  when: lamplighter_openbao_addr | length > 0
+
+# Secrets end up single-quoted in env files: no quotes or newlines allowed.
+- name: Check the secret values
+  ansible.builtin.assert:
+    that: item is not search("['\n\r]")
+    fail_msg: Secret values must not contain single quotes or newlines.
+    quiet: true
+  loop:
+    - "{{ lamplighter_postgres_password }}"
+    - "{{ lamplighter_metrics_token }}"
+    - "{{ lamplighter_worker_openbao_role_id }}"
+    - "{{ lamplighter_worker_openbao_secret_id }}"
+    - "{{ lamplighter_scheduler_openbao_role_id }}"
+    - "{{ lamplighter_scheduler_openbao_secret_id }}"
+    - "{{ lamplighter_oidc_client_secret }}"
+    - "{{ lamplighter_registry_password }}"
+  loop_control:
+    label: "***"
+  no_log: true

@@ -57,6 +57,12 @@ _LAST_SUCCESS = text(
 )
 
 
+_MAINTENANCE = text(
+    "SELECT task, last_status, extract(epoch FROM last_success_at) AS success_ts"
+    " FROM maintenance_status"
+)
+
+
 @dataclass
 class _Histogram:
     count: int = 0
@@ -75,6 +81,7 @@ class RunMetricsCollector(Collector):
             queue = session.execute(_QUEUE).one()
             last_success = session.execute(_LAST_SUCCESS).all()
             archive = session.execute(_ARCHIVE).all()
+            maint = session.execute(_MAINTENANCE).all()
 
         # Live runs + archive, so retention does not make the counters drop.
         counts: dict[tuple[str, str], int] = defaultdict(int)
@@ -129,6 +136,24 @@ class RunMetricsCollector(Collector):
         for row in last_success:
             last.add_metric([str(row.schedule_id), row.template], float(row.ts))
         yield last
+
+        # Alert on these: e.g. no successful backup for more than 26 hours.
+        maint_success = GaugeMetricFamily(
+            "lamplighter_maintenance_last_success_timestamp_seconds",
+            "Time of the last successful run of a maintenance task (retention, backup)",
+            labels=["task"],
+        )
+        maint_failed = GaugeMetricFamily(
+            "lamplighter_maintenance_last_attempt_failed",
+            "1 if the last attempt of a maintenance task failed, otherwise 0",
+            labels=["task"],
+        )
+        for row in maint:
+            if row.success_ts is not None:
+                maint_success.add_metric([row.task], float(row.success_ts))
+            maint_failed.add_metric([row.task], 1.0 if row.last_status == "failed" else 0.0)
+        yield maint_success
+        yield maint_failed
 
 
 def build_registry(sm: sessionmaker[Session]) -> CollectorRegistry:

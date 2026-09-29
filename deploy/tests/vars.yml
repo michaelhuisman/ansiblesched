@@ -1,0 +1,19 @@
+---
+# deploy-test (CI). The fixtures (dev OpenBao, ssh-target, git-http) run from
+# compose.dev.yml as project `lamplighter-fixtures`; the dev secrets come from
+# scripts/dev-keys.sh.
+lamplighter_image: localhost/lamplighter
+lamplighter_pull: never
+lamplighter_public_url: http://localhost:8000
+lamplighter_external_networks: [lamplighter-fixtures_default]
+lamplighter_openbao_addr: http://openbao:8200
+lamplighter_postgres_password: >-
+  {{ lookup('ansible.builtin.password', playbook_dir ~ '/../.dev/secrets/deploy-test-postgres',
+            chars=['ascii_letters', 'digits'], length=32) }}
+lamplighter_metrics_token: "{{ lookup('ansible.builtin.file', playbook_dir ~ '/../.dev/secrets/metrics-token') }}"
+lamplighter_worker_openbao_role_id: "{{ lookup('ansible.builtin.file', playbook_dir ~ '/../.dev/secrets/openbao/worker-role-id') }}"
+lamplighter_worker_openbao_secret_id: "{{ lookup('ansible.builtin.file', playbook_dir ~ '/../.dev/secrets/openbao/worker-secret-id') }}"
+lamplighter_scheduler_openbao_role_id: "{{ lookup('ansible.builtin.file', playbook_dir ~ '/../.dev/secrets/openbao/scheduler-role-id') }}"
+lamplighter_scheduler_openbao_secret_id: "{{ lookup('ansible.builtin.file', playbook_dir ~ '/../.dev/secrets/openbao/scheduler-secret-id') }}"
+lamplighter_worker_stop_grace: 10m
+lamplighter_backup_keep_days: 7

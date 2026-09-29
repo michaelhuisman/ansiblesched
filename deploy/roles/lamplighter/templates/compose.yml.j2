@@ -1,0 +1,198 @@
+# {{ ansible_managed }}
+# lamplighter production stack. Managed by the Ansible role deploy/roles/lamplighter:
+# run the role for changes and image updates, not `docker compose up` by hand.
+# Secrets are in {{ lamplighter_dir }}/secrets/*.env (0600, root).
+{% set secrets = lamplighter_dir ~ '/secrets' %}
+{% set app_env = {
+    'LAMPLIGHTER_DATABASE_URL': 'postgresql+psycopg://lamplighter@postgres:5432/lamplighter',
+    'LAMPLIGHTER_LOG_LEVEL': lamplighter_log_level,
+    'LAMPLIGHTER_PUBLIC_URL': lamplighter_public_url,
+    'LAMPLIGHTER_TRUSTED_PROXIES': lamplighter_trusted_proxies,
+} %}
+{% for key, value in lamplighter_settings.items() %}
+{%   set _ = app_env.update({'LAMPLIGHTER_' ~ key | upper: (value | string | lower) if value is boolean else value | string}) %}
+{% endfor %}
+{% set openbao_env = {} %}
+{% if lamplighter_openbao_addr %}
+{%   set _ = openbao_env.update({'LAMPLIGHTER_OPENBAO_ADDR': lamplighter_openbao_addr}) %}
+{% endif %}
+{% if lamplighter_openbao_ca_cert %}
+{%   set _ = openbao_env.update({'LAMPLIGHTER_OPENBAO_CA_CERT': lamplighter_openbao_ca_cert}) %}
+{% endif %}
+name: {{ lamplighter_project_name }}
+
+x-app: &app
+  image: {{ (lamplighter_image ~ ':' ~ lamplighter_image_tag) | to_json }}
+  restart: unless-stopped
+  env_file:
+    - {{ secrets }}/db.env
+  environment: &app-env
+{% for key, value in app_env.items() %}
+    {{ key }}: {{ value | string | to_json }}
+{% endfor %}
+  logging: &logging
+    driver: json-file
+    options:
+      max-size: 50m
+      max-file: "5"
+  depends_on:
+    postgres:
+      condition: service_healthy
+    migrate:
+      condition: service_completed_successfully
+
+x-worker: &worker
+  <<: *app
+  command: ["worker"]
+  # A worker finishes its current run before it stops (update, restart).
+  stop_grace_period: {{ lamplighter_worker_stop_grace }}
+  env_file:
+    - {{ secrets }}/db.env
+    - {{ secrets }}/worker.env
+  environment:
+    <<: *app-env
+{% for key, value in openbao_env.items() %}
+    {{ key }}: {{ value | to_json }}
+{% endfor %}
+  # Docker mounts tmpfs noexec by default, but the git askpass script is executed from
+  # the private data dir. nosuid and nodev stay.
+  tmpfs:
+    - /run/lamplighter:exec,nosuid,nodev,size={{ lamplighter_runtime_tmpfs_size }},uid=10001,gid=10001,mode=0700
+  volumes:
+    - repocache:/var/cache/lamplighter/repos
+{% if lamplighter_openbao_ca_cert %}
+    - {{ lamplighter_openbao_ca_cert }}:{{ lamplighter_openbao_ca_cert }}:ro
+{% endif %}
+{% if lamplighter_external_networks %}
+  networks:
+    - default
+{%   for net in lamplighter_external_networks %}
+    - {{ net }}
+{%   endfor %}
+{% endif %}
+
+services:
+  postgres:
+    image: {{ lamplighter_postgres_image | to_json }}
+    # A frozen (not crashed) leader loses its advisory lock within ~15s.
+    command:
+      - postgres
+      - -c
+      - tcp_keepalives_idle=5
+      - -c
+      - tcp_keepalives_interval=5
+      - -c
+      - tcp_keepalives_count=2
+    restart: unless-stopped
+    env_file:
+      - {{ secrets }}/db.env
+    environment:
+      POSTGRES_USER: lamplighter
+      POSTGRES_DB: lamplighter
+    volumes:
+      - pgdata:/var/lib/postgresql
+    logging: *logging
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U lamplighter -d lamplighter"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  migrate:
+    <<: *app
+    command: ["migrate"]
+    restart: "no"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  api:
+    <<: *app
+    command: ["api"]
+    env_file:
+      - {{ secrets }}/db.env
+      - {{ secrets }}/api.env
+    ports:
+      - {{ (lamplighter_api_bind ~ ':8000') | to_json }}
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/readyz', timeout=3)"
+      interval: 10s
+      timeout: 5s
+      start_period: 20s
+      retries: 3
+
+  scheduler:
+    <<: *app
+    command: ["scheduler"]
+    env_file:
+      - {{ secrets }}/db.env
+      - {{ secrets }}/scheduler.env
+    environment:
+      <<: *app-env
+{% for key, value in openbao_env.items() %}
+      {{ key }}: {{ value | to_json }}
+{% endfor %}
+{% if lamplighter_webhook_openbao_path %}
+      LAMPLIGHTER_WEBHOOK_OPENBAO_PATH: {{ lamplighter_webhook_openbao_path | to_json }}
+{% endif %}
+{% if lamplighter_openbao_ca_cert %}
+    volumes:
+      - {{ lamplighter_openbao_ca_cert }}:{{ lamplighter_openbao_ca_cert }}:ro
+{% endif %}
+    deploy:
+      replicas: {{ lamplighter_scheduler_replicas }}
+{% if lamplighter_external_networks %}
+    networks:
+      - default
+{%   for net in lamplighter_external_networks %}
+      - {{ net }}
+{%   endfor %}
+{% endif %}
+
+  # Two worker services instead of one scaled service: the role updates them one at a
+  # time, so one keeps working while the other finishes its run.
+  worker-a:
+    <<: *worker
+
+  worker-b:
+    <<: *worker
+
+  # One-shot, started by the systemd timer (lamplighter-backup.timer) via bin/backup.sh.
+  backup:
+    image: {{ lamplighter_postgres_image | to_json }}
+    profiles: ["backup"]
+    restart: "no"
+    entrypoint: ["sh", "/backup-dump.sh"]
+    env_file:
+      - {{ secrets }}/db.env
+    environment:
+      PGHOST: postgres
+      PGUSER: lamplighter
+      PGDATABASE: lamplighter
+      BACKUP_KEEP_DAYS: "{{ lamplighter_backup_keep_days }}"
+    volumes:
+      - {{ lamplighter_dir }}/bin/backup-dump.sh:/backup-dump.sh:ro
+      - {{ lamplighter_dir }}/backups:/backups
+    logging: *logging
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+networks:
+  default:
+    ipam:
+      config:
+        - subnet: {{ lamplighter_network_subnet }}
+          gateway: {{ lamplighter_network_gateway }}
+{% for net in lamplighter_external_networks %}
+  {{ net }}:
+    external: true
+{% endfor %}
+
+volumes:
+  pgdata:
+  repocache:

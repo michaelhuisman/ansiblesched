@@ -1,0 +1,4 @@
+---
+# Loads only the role defaults (used by restore.yml).
+- name: Role defaults loaded
+  ansible.builtin.meta: noop
