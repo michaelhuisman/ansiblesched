@@ -559,8 +559,11 @@ Postgres external or via an operator.
 - **Lockout per username:** prevents brute force on a single account. An attacker can
   use it to lock an account temporarily, though. A rate limit per IP is added in phase 5,
   via the proxy.
-- **UI on narrow screens:** the tables are made for desktop and do not scroll nicely on
-  a phone.
+- **UI on narrow screens:** since the sidebar layout the menu slides in and wide tables
+  scroll inside the content area, but the tables themselves are still made for desktop
+  (no stacked card view on a phone).
+- **Dashboard:** a start page like Dependency-Track's (runs of the last 24 hours per
+  status, queue, failing schedules, backup status) was deferred; Runs is the start page.
 - **Remote processes on cancel/timeout:** ansible-runner stops the local ansible process;
   a running command on the target (e.g. `sleep`) keeps running there.
 - **AppRole secret ids** are stored as an env file on the host (0600, root). Better:

@@ -6,35 +6,91 @@
   <title>{% block title %}lamplighter{% endblock %}</title>
   <link rel="icon" type="image/svg+xml" href="{{ static('brand/badge.svg') }}">
   <link rel="stylesheet" href="{{ static('app.css') }}">
+  {# Before the first paint: restore a collapsed sidebar without a flicker. #}
+  <script src="{{ static('layout-init.js') }}"></script>
   <script src="{{ static('htmx.min.js') }}" defer></script>
+  <script src="{{ static('layout.js') }}" defer></script>
 </head>
 {# htmx sends the CSRF token with every non-GET request. #}
 <body {% if user and user.csrf_token %}hx-headers='{"X-CSRF-Token": "{{ user.csrf_token }}"}'{% endif %}>
-  <header class="topbar">
-    <a class="brand" href="/ui/runs">{% with logo_class='brand-logo' %}{% include "_logo.html" %}{% endwith %}</a>
-    {% if user %}
-    <nav>
-      {% set section = request.url.path.split('/')[2] if request.url.path.count('/') > 1 else '' %}
-      <a href="/ui/runs" {% if section == 'runs' %}aria-current="page"{% endif %}>Runs</a>
-      <a href="/ui/templates" {% if section == 'templates' %}aria-current="page"{% endif %}>Templates</a>
-      <a href="/ui/schedules" {% if section == 'schedules' %}aria-current="page"{% endif %}>Schedules</a>
-      <a href="/ui/projects" {% if section == 'projects' %}aria-current="page"{% endif %}>Projects</a>
-      <a href="/ui/inventories" {% if section == 'inventories' %}aria-current="page"{% endif %}>Inventories</a>
-      <a href="/ui/credentials" {% if section == 'credentials' %}aria-current="page"{% endif %}>Credentials</a>
-      {% if user.can(Action.MANAGE_USERS) %}
-        <a href="/ui/users" {% if section == 'users' %}aria-current="page"{% endif %}>Users</a>
-        <a href="/ui/audit" {% if section == 'audit' %}aria-current="page"{% endif %}>Audit</a>
-      {% endif %}
-    </nav>
-    <a class="user" href="/ui/account" title="{{ user.subject }} · {{ user.roles | sort | join(', ') }}">{{ user.label }}</a>
-    <form method="post" action="/ui/logout" class="inline">
-      {% include "_csrf.html" %}
-      <button class="small secondary" type="submit">Sign out</button>
-    </form>
-    {% endif %}
-  </header>
-  <main>
-    {% block content %}{% endblock %}
+{% if user %}
+  {% from "_macros.html" import icon %}
+  {% include "_icons.html" %}
+  {% set segs = request.url.path.strip('/').split('/') %}
+  {% set section = segs[1] if segs | length > 1 else '' %}
+  {% set nav = [
+      ('Automation', [('runs', 'Runs'), ('templates', 'Templates'), ('schedules', 'Schedules')]),
+      ('Configuration', [('projects', 'Projects'), ('inventories', 'Inventories'), ('credentials', 'Credentials')]),
+  ] %}
+  {% if user.can(Action.MANAGE_USERS) %}
+    {% set nav = nav + [('Administration', [('users', 'Users'), ('audit', 'Audit')])] %}
+  {% endif %}
+  {% set labels = {'account': 'Account'} %}
+  {% for _, items in nav %}{% for slug, label in items %}{% set _ = labels.update({slug: label}) %}{% endfor %}{% endfor %}
+
+  <div class="shell">
+    <aside class="sidebar" id="sidebar" aria-label="Main navigation">
+      <a class="side-brand" href="/ui/runs" title="lamplighter">
+        <img class="side-badge" src="{{ static('brand/badge.svg') }}" alt="">
+        <img class="side-wordmark" src="{{ static('brand/logo-dark.svg') }}" alt="lamplighter">
+      </a>
+      <nav>
+        {% for group, items in nav %}
+          <div class="nav-group">{{ group }}</div>
+          {% for slug, label in items %}
+            <a href="/ui/{{ slug }}" title="{{ label }}" {% if section == slug %}aria-current="page"{% endif %}>
+              {{ icon(slug) }}<span class="nav-label">{{ label }}</span></a>
+          {% endfor %}
+        {% endfor %}
+      </nav>
+      <button class="side-collapse" type="button" data-sidebar-collapse aria-label="Collapse the menu" title="Collapse the menu">
+        {{ icon('collapse') }}</button>
+    </aside>
+    <div class="scrim" data-sidebar-close></div>
+
+    <div class="main-col">
+      <header class="topbar">
+        <button class="icon-button" type="button" data-sidebar-toggle aria-controls="sidebar" aria-label="Menu">
+          {{ icon('menu') }}</button>
+        <nav class="breadcrumb" aria-label="Breadcrumb">
+          {% block breadcrumb %}
+          <a href="/ui/runs">Home</a>
+          {% if section in labels %}
+            <span class="sep">/</span>
+            {% if segs | length > 2 %}<a href="/ui/{{ section }}">{{ labels[section] }}</a>
+            {% else %}<span aria-current="page">{{ labels[section] }}</span>{% endif %}
+            {% for seg in segs[2:] %}
+              <span class="sep">/</span>
+              {% set text = ('Run ' ~ seg if section == 'runs' else '#' ~ seg) if seg.isdigit() else seg | replace('-', ' ') | capitalize %}
+              {% if loop.last %}<span aria-current="page">{{ text }}</span>{% else %}<span>{{ text }}</span>{% endif %}
+            {% endfor %}
+          {% endif %}
+          {% endblock %}
+        </nav>
+        <details class="usermenu">
+          <summary title="{{ user.subject }} · {{ user.roles | sort | join(', ') }}">
+            {{ icon('account') }}<span class="user">{{ user.label }}</span>{{ icon('down') }}</summary>
+          <div class="usermenu-panel">
+            <div class="usermenu-who"><strong>{{ user.label }}</strong>
+              <span class="muted">{{ user.roles | sort | join(', ') }}</span></div>
+            <a href="/ui/account">{{ icon('account') }}My account</a>
+            <form method="post" action="/ui/logout">
+              {% include "_csrf.html" %}
+              <button class="menu-item" type="submit">{{ icon('logout') }}Sign out</button>
+            </form>
+          </div>
+        </details>
+      </header>
+      <main>
+        {% block content %}{% endblock %}
+      </main>
+    </div>
+  </div>
+{% else %}
+  {# Signed out (login page): no navigation. #}
+  <main class="bare">
+    {{ self.content() }}
   </main>
+{% endif %}
 </body>
 </html>
