@@ -61,7 +61,7 @@ def get_run(run_id: int, session: SessionDep) -> RunOut:
 def list_events(
     run_id: int,
     session: SessionDep,
-    after_seq: Annotated[int, Query(ge=0)] = 0,
+    after_seq: Annotated[int, Query(ge=runs.BEFORE_FIRST)] = runs.BEFORE_FIRST,
     limit: Annotated[int, Query(ge=1, le=5000)] = 500,
 ) -> RunEventsPage:
     items = [
@@ -87,7 +87,7 @@ def stream_run(
     run_id: int,
     session: SessionDep,
     last_event_id: Annotated[str | None, Header()] = None,
-    after_seq: Annotated[int, Query(ge=0)] = 0,
+    after_seq: Annotated[int, Query(ge=runs.BEFORE_FIRST)] = runs.BEFORE_FIRST,
 ) -> StreamingResponse:
     """Live events of a run (SSE). Reconnecting resumes from Last-Event-ID."""
     runs.get(session, run_id)  # 404 before the stream starts

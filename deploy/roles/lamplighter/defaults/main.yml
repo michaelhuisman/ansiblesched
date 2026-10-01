@@ -30,6 +30,11 @@ lamplighter_scheduler_replicas: 1
 # A worker finishes its current run on an update or stop; this is the maximum wait.
 lamplighter_worker_stop_grace: 1h
 lamplighter_runtime_tmpfs_size: 1g
+# Outbound proxy for the workers: Galaxy (collections), git over https and OpenBao use it.
+# Put internal hosts that must be reached directly (e.g. OpenBao) in no_proxy.
+lamplighter_http_proxy: ""
+lamplighter_https_proxy: ""
+lamplighter_no_proxy: localhost,127.0.0.1,postgres
 # Any other setting as LAMPLIGHTER_<NAME>, e.g. {retention_runs_days: 365}.
 lamplighter_settings: {}
 

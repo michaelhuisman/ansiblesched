@@ -15,6 +15,7 @@ from app.core.openbao import get_openbao
 from app.services import queue
 from app.worker.credentials import CredentialResolver, OpenBaoResolver, UnconfiguredResolver
 from app.worker.executor import Executor
+from app.worker.galaxy import CollectionCache
 from app.worker.git import RepoCache
 from app.worker.locking import PgTemplateLocker
 
@@ -60,10 +61,16 @@ def run_worker(settings: Settings) -> int:
     settings.runtime_dir.mkdir(parents=True, exist_ok=True)
     sm = get_sessionmaker()
     repos = RepoCache(settings.repo_cache_dir)
-    executor = Executor(settings, sm, _resolver(), repos)
+    collections = CollectionCache(
+        settings.collections_cache_dir, settings.collections_install_timeout_s
+    )
+    executor = Executor(settings, sm, _resolver(), repos, collections=collections)
     locker = PgTemplateLocker(settings.worker_id)
 
     recover(settings, sm, repos)
+    pruned = collections.prune(settings.collections_cache_days)
+    if pruned:
+        log.info("pruned collection cache", extra={"entries": pruned})
     log.info("worker started", extra={"worker_id": settings.worker_id})
 
     while not stop.is_set():

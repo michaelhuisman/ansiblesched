@@ -44,6 +44,11 @@ x-app: &app
 x-worker: &worker
   <<: *app
   command: ["worker"]
+  # One SELinux level for both workers: files one worker writes into the shared caches
+  # stay readable for the other, while other containers stay separated. Ignored without
+  # SELinux.
+  security_opt:
+    - label=level:s0:c401,c402
   # A worker finishes its current run before it stops (update, restart).
   stop_grace_period: {{ lamplighter_worker_stop_grace }}
   env_file:
@@ -54,12 +59,20 @@ x-worker: &worker
 {% for key, value in openbao_env.items() %}
     {{ key }}: {{ value | to_json }}
 {% endfor %}
+{% if lamplighter_http_proxy or lamplighter_https_proxy %}
+    # Upper and lower case: not every tool reads both.
+{%   for name, value in [('http_proxy', lamplighter_http_proxy), ('https_proxy', lamplighter_https_proxy), ('no_proxy', lamplighter_no_proxy)] if value %}
+    {{ name | upper }}: {{ value | to_json }}
+    {{ name }}: {{ value | to_json }}
+{%   endfor %}
+{% endif %}
   # Docker mounts tmpfs noexec by default, but the git askpass script is executed from
   # the private data dir. nosuid and nodev stay.
   tmpfs:
     - /run/lamplighter:exec,nosuid,nodev,size={{ lamplighter_runtime_tmpfs_size }},uid=10001,gid=10001,mode=0700
   volumes:
     - repocache:/var/cache/lamplighter/repos
+    - collections:/var/cache/lamplighter/collections
 {% if lamplighter_openbao_ca_cert %}
     - {{ lamplighter_openbao_ca_cert }}:{{ lamplighter_openbao_ca_cert }}:ro
 {% endif %}
@@ -196,3 +209,4 @@ networks:
 volumes:
   pgdata:
   repocache:
+  collections:

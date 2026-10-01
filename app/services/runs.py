@@ -12,6 +12,9 @@ from app.models import Run, RunEvent, RunStatus, Template
 from app.services import audit, crud
 from app.services.errors import ConflictError, NotFoundError
 
+# Event sequence numbers start at 0 (lamplighter's setup notes); ansible-runner's at 1.
+BEFORE_FIRST = -1
+
 
 def launch(
     session: Session,
@@ -72,7 +75,7 @@ def list_runs(session: Session, flt: RunFilter) -> Sequence[Run]:
 
 
 def list_events(
-    session: Session, run_id: int, *, after_seq: int = 0, limit: int = 500
+    session: Session, run_id: int, *, after_seq: int = BEFORE_FIRST, limit: int = 500
 ) -> Sequence[RunEvent]:
     crud.get(session, Run, run_id)
     stmt = (

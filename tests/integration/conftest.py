@@ -105,7 +105,7 @@ def fixture_head() -> str:
 
 
 class Env:
-    """Basisconfiguratie: credential, project en inline inventory tegen ssh-target."""
+    """Base configuration: credential, project and inline inventory against ssh-target."""
 
     def __init__(self, api: httpx.Client) -> None:
         self.api = api
@@ -164,7 +164,7 @@ class Env:
 
     def events(self, run_id: int) -> list[dict[str, Any]]:
         items: list[dict[str, Any]] = []
-        after = 0
+        after = -1  # seq 0: lamplighter's own setup notes
         while True:
             resp = self.api.get(f"/runs/{run_id}/events", params={"after_seq": after})
             resp.raise_for_status()

@@ -1,0 +1,12 @@
+# Test collection for the integration tests; built into the collections fixture repo
+# by scripts/build-fixtures.sh (no Galaxy access needed).
+namespace: lamplighter_test
+name: fixtures
+version: 1.0.0
+readme: README.md
+authors:
+  - lamplighter tests
+description: Test collection for lamplighter's integration tests
+license:
+  - MIT
+build_ignore: []

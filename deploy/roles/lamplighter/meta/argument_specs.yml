@@ -27,6 +27,9 @@ argument_specs:
       lamplighter_scheduler_replicas: {type: int}
       lamplighter_worker_stop_grace: {type: str}
       lamplighter_runtime_tmpfs_size: {type: str}
+      lamplighter_http_proxy: {type: str}
+      lamplighter_https_proxy: {type: str}
+      lamplighter_no_proxy: {type: str}
       lamplighter_settings: {type: dict}
       lamplighter_postgres_password: {type: str, required: true, no_log: true}
       lamplighter_metrics_token: {type: str, no_log: true}

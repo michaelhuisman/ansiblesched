@@ -1,0 +1,5 @@
+---
+# Refers to a tarball that does not exist: installing fails (without Galaxy access).
+collections:
+  - name: collections/missing-9.9.9.tar.gz
+    type: file

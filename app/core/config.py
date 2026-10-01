@@ -12,6 +12,11 @@ class Settings(BaseSettings):
     database_url: str
     runtime_dir: Path = Path("/run/lamplighter")
     repo_cache_dir: Path = Path("/var/cache/lamplighter/repos")
+    # Collections from a project's collections/requirements.yml, cached per requirements.
+    collections_cache_dir: Path = Path("/var/cache/lamplighter/collections")
+    collections_install_timeout_s: int = Field(default=600, ge=10)
+    # Cache entries unused for this many days are removed at worker start (0 = never).
+    collections_cache_days: int = Field(default=30, ge=0)
     worker_id: str = Field(default_factory=socket.gethostname)
     poll_interval_s: float = 2.0
     log_level: str = "INFO"

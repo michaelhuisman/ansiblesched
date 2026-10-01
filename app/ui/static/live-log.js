@@ -10,6 +10,7 @@
 
   // runner_on_* for regular tasks, runner_item_on_* for loop items.
   const classFor = (ev) => {
+    if (ev.event === "lamplighter_note") return "ev-note";
     const kind = ev.event.replace(/^runner_(item_)?on_/, "");
     if (kind === "failed" || kind === "unreachable") return "ev-failed";
     if (kind === "skipped") return "ev-skipped";

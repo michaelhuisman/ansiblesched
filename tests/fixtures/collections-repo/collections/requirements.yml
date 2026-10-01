@@ -1,0 +1,5 @@
+---
+# The tarball is built by scripts/build-fixtures.sh; a local file needs no Galaxy access.
+collections:
+  - name: collections/lamplighter_test-fixtures-1.0.0.tar.gz
+    type: file

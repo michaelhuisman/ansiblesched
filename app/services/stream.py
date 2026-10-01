@@ -34,7 +34,10 @@ class Clock:
 
 
 def run_stream(
-    sm: sessionmaker[Session], run_id: int, after_seq: int = 0, clock: Clock | None = None
+    sm: sessionmaker[Session],
+    run_id: int,
+    after_seq: int = runs.BEFORE_FIRST,
+    clock: Clock | None = None,
 ) -> Iterator[str]:
     """Yield SSE messages for `run_id` starting after `after_seq`.
 
@@ -94,4 +97,4 @@ def run_stream(
 def parse_last_event_id(value: str | None) -> int:
     if value and value.isdigit():
         return int(value)
-    return 0
+    return runs.BEFORE_FIRST

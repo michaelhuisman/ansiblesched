@@ -44,6 +44,7 @@ deploy/
   site.yml, restore.yml
   tests/           # deploy-test (CI only: writes to /opt and systemd on the runner)
 docs/plan.md, docs/deploy/  # design; nginx example, backup and restore
+collections/requirements.yml  # standard set of Ansible collections in the image
 compose.dev.yml    # dev: postgres, ssh-target, keycloak, openbao, git-http, webhook-sink
 ```
 

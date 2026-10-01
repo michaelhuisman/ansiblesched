@@ -6,6 +6,7 @@ import shutil
 import time
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from pathlib import Path, PurePosixPath
 from typing import Any
 
@@ -23,6 +24,7 @@ from app.worker.credentials import (
     resolve,
     resolve_git,
 )
+from app.worker.galaxy import CollectionCache, Collections, CollectionsError
 from app.worker.git import GitError, RepoCache
 
 log = logging.getLogger(__name__)
@@ -34,6 +36,9 @@ EVENT_FLUSH_INTERVAL_S = 1.0
 CANCEL_CHECK_INTERVAL_S = 1.0
 LOCK_CHECK_INTERVAL_S = 5.0
 LOCK_LOST_REASON = "overlap lock lost"
+# Lamplighter's own setup notes in the run log, before ansible-runner's events (seq >= 1).
+SETUP_NOTE_SEQ = 0
+SETUP_NOTE_EVENT = "lamplighter_note"
 
 # Checks whether the run's overlap lock still belongs to this worker.
 LockGuard = Callable[[], bool]
@@ -242,12 +247,14 @@ class Executor:
         resolver: CredentialResolver,
         repos: RepoCache,
         runner_fn: RunnerFn = ansible_runner.run,
+        collections: CollectionCache | None = None,
     ) -> None:
         self._settings = settings
         self._sm = sm
         self._resolver = resolver
         self._repos = repos
         self._runner_fn = runner_fn
+        self._collections = collections
 
     def run_dir(self, run_id: int) -> Path:
         return self._settings.runtime_dir / str(run_id)
@@ -271,7 +278,7 @@ class Executor:
                 reason = "canceled by user"
             elif status == RunStatus.TIMEOUT:
                 reason = f"exceeded timeout of {spec.timeout_s}s"
-        except (RunSetupError, CredentialError, GitError) as exc:
+        except (RunSetupError, CredentialError, GitError, CollectionsError) as exc:
             reason = str(exc)
             log.warning("run setup failed", extra={"run_id": run_id, "reason": reason})
         except Exception as exc:
@@ -319,6 +326,7 @@ class Executor:
             raise GitError(SecretMasker(secrets).mask(str(exc))) from None
         with self._sm() as session:
             queue.set_commit(session, spec.run_id, sha)
+        collections = self._install_collections(spec.run_id, project_dir, SecretMasker(secrets))
 
         playbook = _inside(project_dir, spec.playbook_path)
         if spec.inventory_source == "inline":
@@ -351,6 +359,8 @@ class Executor:
             "ANSIBLE_SSH_CONTROL_PATH_DIR": str(run_dir / "cp"),
         }
         envvars.update(self._host_key_env(spec, run_dir))
+        if collections is not None:
+            envvars["ANSIBLE_COLLECTIONS_PATH"] = collections.search_path()
 
         sink = EventSink(self._sm, spec.run_id, SecretMasker(secrets))
         runner = self._runner_fn(
@@ -378,6 +388,36 @@ class Executor:
         status = _RUNNER_STATUS.get(str(runner.status), RunStatus.ERROR)
         rc = runner.rc if isinstance(runner.rc, int) else None
         return status, rc, sink.stats
+
+    def _install_collections(
+        self, run_id: int, project_dir: Path, masker: SecretMasker
+    ) -> Collections | None:
+        """Collections from the project's collections/requirements.yml, with a note in the
+        run log. A requirements entry could contain a token in a URL: mask errors."""
+        if self._collections is None:
+            return None
+        try:
+            collections = self._collections.ensure(project_dir)
+        except CollectionsError as exc:
+            raise CollectionsError(masker.mask(str(exc))) from None
+        if collections is not None:
+            how = "cached" if collections.cached else f"installed in {collections.seconds:.0f}s"
+            self._note(run_id, f"Collections from collections/requirements.yml: {how}")
+        return collections
+
+    def _note(self, run_id: int, text: str) -> None:
+        row = {
+            "run_id": run_id,
+            "seq": SETUP_NOTE_SEQ,
+            "event": SETUP_NOTE_EVENT,
+            "host": None,
+            "task": None,
+            "created_at": datetime.now(UTC),
+            "stdout": text,
+            "data": {},
+        }
+        with self._sm() as session:
+            queue.add_events(session, [row])
 
     def _host_key_env(self, spec: RunSpec, run_dir: Path) -> dict[str, str]:
         """Host key checking: a known_hosts credential on the template enforces strict

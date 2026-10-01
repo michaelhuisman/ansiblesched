@@ -12,7 +12,8 @@ from app.core.config import Settings
 from app.models import RunStatus
 from app.worker import executor as executor_mod
 from app.worker.credentials import CredentialError, CredentialRef, GitAuth
-from app.worker.executor import Executor, RunSpec
+from app.worker.executor import SETUP_NOTE_SEQ, Executor, RunSpec
+from app.worker.galaxy import Collections, CollectionsError
 from app.worker.git import GitError
 
 SHA = "a" * 40
@@ -118,13 +119,14 @@ def env(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> SimpleNamespace:
     )
     repos = FakeRepos()
 
-    def make(runner_fn: Any) -> Executor:
+    def make(runner_fn: Any, collections: Any = None) -> Executor:
         return Executor(
             settings,
             _dummy_session,  # type: ignore[arg-type]
             resolver,
             repos,  # type: ignore[arg-type]
             runner_fn=runner_fn,
+            collections=collections,
         )
 
     return SimpleNamespace(runtime=runtime, rec=rec, make=make, spec=spec_holder, repos=repos)
@@ -279,4 +281,62 @@ def test_lost_lock_makes_run_error(env: SimpleNamespace) -> None:
     status = env.make(fake_runner).execute(5, lock_guard=lambda: False)
     assert status == RunStatus.ERROR
     assert env.rec.finished["reason"] == "overlap lock lost"
+    assert not (env.runtime / "5").exists()
+
+
+# --- collections -----------------------------------------------------------------------
+
+
+class FakeCollections:
+    def __init__(self, result: Collections | None = None, error: str | None = None) -> None:
+        self.result = result
+        self.error = error
+        self.projects: list[Path] = []
+
+    def ensure(self, project_dir: Path) -> Collections | None:
+        self.projects.append(project_dir)
+        if self.error:
+            raise CollectionsError(self.error)
+        return self.result
+
+
+def test_project_collections_go_first_on_the_search_path(env: SimpleNamespace) -> None:
+    seen: dict[str, Any] = {}
+
+    def fake_runner(**kwargs: Any) -> SimpleNamespace:
+        seen.update(kwargs)
+        return _runner_result("successful", 0)
+
+    fake = FakeCollections(Collections(Path("/cache/abc"), cached=True, seconds=0.1))
+    assert env.make(fake_runner, fake).execute(5) == RunStatus.SUCCESSFUL
+    assert fake.projects == [env.runtime / "5" / "project"]
+    path = seen["envvars"]["ANSIBLE_COLLECTIONS_PATH"].split(":")
+    assert path[0] == "/cache/abc"
+    assert path[-1] == "/usr/share/ansible/collections"
+    # A setup note before ansible's own events (seq 0).
+    note = env.rec.events[0]
+    assert (note["seq"], note["event"]) == (SETUP_NOTE_SEQ, "lamplighter_note")
+    assert note["stdout"] == "Collections from collections/requirements.yml: cached"
+
+
+def test_without_requirements_nothing_changes(env: SimpleNamespace) -> None:
+    seen: dict[str, Any] = {}
+
+    def fake_runner(**kwargs: Any) -> SimpleNamespace:
+        seen.update(kwargs)
+        return _runner_result("successful", 0)
+
+    assert env.make(fake_runner, FakeCollections(None)).execute(5) == RunStatus.SUCCESSFUL
+    assert "ANSIBLE_COLLECTIONS_PATH" not in seen["envvars"]
+    assert env.rec.events == []
+
+
+def test_collection_install_error_is_masked(env: SimpleNamespace) -> None:
+    env.spec["spec"] = _spec(git_credential=CredentialRef(3, "git_token", "git/repo", "token"))
+    fake = FakeCollections(error="collection install failed: https://GIT-TOKEN-789@git.x/c.git")
+    status = env.make(lambda **_: pytest.fail("runner must not start"), fake).execute(5)
+    assert status == RunStatus.ERROR
+    reason = env.rec.finished["reason"]
+    assert reason.startswith("collection install failed")
+    assert "GIT-TOKEN-789" not in reason
     assert not (env.runtime / "5").exists()
