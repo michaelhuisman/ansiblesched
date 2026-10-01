@@ -12,7 +12,10 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     ANSIBLE_LOCAL_TEMP=/tmp/ansible-local \
     ANSIBLE_REMOTE_TEMP=/tmp/.ansible-remote
 
+# `upgrade`: Debian security fixes (e.g. OpenSSL) often land before a new base image does;
+# the Trivy gate in CI fails on fixable HIGH/CRITICAL findings.
 RUN apt-get update \
+    && apt-get upgrade -y --no-install-recommends \
     && apt-get install -y --no-install-recommends git openssh-client tini \
     && rm -rf /var/lib/apt/lists/*
 
