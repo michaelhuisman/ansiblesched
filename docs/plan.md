@@ -533,6 +533,31 @@ pinned to a commit SHA:
 
 ---
 
+## Ansible collections
+
+**Scope:** collections for playbooks, in two ways.
+
+- **Standard set in the image:** `collections/requirements.yml` in this repo (pinned:
+  `ansible.posix`, `community.general`), installed at build time into
+  `/usr/share/ansible/collections`. Works offline.
+- **Per project:** a `collections/requirements.yml` in the project's repo (AWX
+  convention) is installed by the worker with `ansible-galaxy` before the run
+  (`app/worker/galaxy.py`). Cache in the shared volume `/var/cache/lamplighter/collections`,
+  one directory per hash of the files under `collections/` (without vendored
+  `ansible_collections/`) plus the ansible-core version. flock per key, install into a
+  temp dir and rename, timeout `LAMPLIGHTER_COLLECTIONS_INSTALL_TIMEOUT_S` (600s),
+  unused entries removed at worker start after `LAMPLIGHTER_COLLECTIONS_CACHE_DAYS` (30).
+  `ANSIBLE_COLLECTIONS_PATH` = project cache, then ansible-core's defaults. Errors end the
+  run as `error`, masked like git errors.
+- **Setup notes in the run log:** lamplighter's own messages are events with `seq 0`
+  (`lamplighter_note`); ansible-runner's start at 1. The events API and the stream
+  therefore default to "after -1".
+- **Deploy:** the role adds the `collections` volume and proxy variables
+  (`lamplighter_http_proxy`, `lamplighter_https_proxy`, `lamplighter_no_proxy`) for the
+  workers.
+- **Tests:** a self-built test collection (`tests/fixtures/collection-src`) in a fixture
+  repo as a local tarball, so the integration tests need no Galaxy access.
+
 ## Phase 6 — Kubernetes (Helm)
 
 **Scope:** a Helm chart as an alternative to Docker Compose: deployments for api,
@@ -544,6 +569,8 @@ Postgres external or via an operator.
 
 ## Open items
 
+- **Collections, later:** `roles/requirements.yml` (Galaxy roles), a private Galaxy or
+  Automation Hub with a token from OpenBao, and signature verification of collections.
 - **SSE scales per thread:** every open stream occupies a thread from the thread pool and
   polls the database. That is fine for dev and small scale. With more viewers:
   `LISTEN/NOTIFY` on new events or an async generator (phase 5).

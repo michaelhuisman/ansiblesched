@@ -22,11 +22,22 @@ RUN apt-get update \
 RUN groupadd --gid 10001 app \
     && useradd --uid 10001 --gid app --home-dir /home/app --create-home app \
     && install -d -o app -g app -m 0700 /run/lamplighter \
-    && install -d -o app -g app /var/cache/lamplighter/repos /fixtures
+    && install -d -o app -g app /var/cache/lamplighter/repos /var/cache/lamplighter/collections \
+        /fixtures
 
 WORKDIR /app
 COPY requirements.txt .
 RUN pip install -r requirements.txt
+
+# Standard set of collections (collections/requirements.yml), on ansible-core's default
+# search path. Projects can add their own via collections/requirements.yml in their repo.
+COPY collections/requirements.yml /tmp/collections-requirements.yml
+RUN ansible-galaxy collection install -r /tmp/collections-requirements.yml \
+        -p /usr/share/ansible/collections \
+    && chmod -R a+rX /usr/share/ansible/collections \
+    && rm -rf /tmp/collections-requirements.yml /tmp/ansible-local /root/.ansible
+# (ansible-galaxy runs as root here; its temp dir in ANSIBLE_LOCAL_TEMP would otherwise
+# stay behind root-owned and break every Ansible command of the app user.)
 
 ENTRYPOINT ["tini", "--", "python", "-m", "app"]
 CMD ["api"]

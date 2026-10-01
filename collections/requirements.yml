@@ -1,0 +1,9 @@
+---
+# Standard set of Ansible collections in the lamplighter image (Dockerfile). Every run
+# can use these. A project can add or override collections with its own
+# collections/requirements.yml in its Git repo. Keep the versions pinned.
+collections:
+  - name: ansible.posix
+    version: 2.2.2
+  - name: community.general
+    version: 13.4.0

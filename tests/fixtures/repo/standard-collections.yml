@@ -1,0 +1,9 @@
+- name: Use the standard set of collections from the image
+  hosts: all
+  gather_facts: false
+  tasks:
+    - name: A filter from community.general (runs on the controller)
+      ansible.builtin.assert:
+        that:
+          - >-
+            ("v" | community.general.dict_kv("k")) == {"k": "v"}

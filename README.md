@@ -227,6 +227,39 @@ others:
 
 `/healthz` (liveness) and `/readyz` (database reachable) are there for health checks.
 
+## Ansible collections
+
+The image comes with `ansible-core` and a small standard set of collections, pinned in
+[`collections/requirements.yml`](collections/requirements.yml): `ansible.posix` and
+`community.general`. Every playbook can use these.
+
+A project can bring its own collections, the same way AWX does: put a
+`collections/requirements.yml` in the root of its Git repo.
+
+```yaml
+# <your-repo>/collections/requirements.yml
+collections:
+  - name: community.docker
+    version: 5.3.0          # pin versions: the cache is per requirements file
+  - name: community.general
+    version: 12.0.0         # overrides the image's version for this project
+```
+
+Before a run, the worker installs these with `ansible-galaxy` into a shared cache (one
+directory per unique `collections/` content). Only the first run waits; the run log shows
+a line like "Collections from collections/requirements.yml: cached". A project's
+collections come before the standard set, so a project can use a different version. If
+the installation fails, the run ends as `error` with the reason.
+
+- The worker needs access to `galaxy.ansible.com` (or the source in your requirements).
+  Behind a proxy, set `lamplighter_https_proxy` (and `lamplighter_no_proxy` for internal
+  hosts such as OpenBao) in the Ansible role.
+- Collections run code on the worker, just like the playbooks in the same repo. Only use
+  sources you trust, and pin versions.
+- Collections vendored in `collections/ansible_collections/` of the repo work as well
+  (ansible-core finds them next to the playbook).
+- Unused cache entries are removed after 30 days (`LAMPLIGHTER_COLLECTIONS_CACHE_DAYS`).
+
 ## Development
 
 Everything runs in containers; you don't need Python 3.12 locally. The project uses

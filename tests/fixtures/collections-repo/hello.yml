@@ -1,0 +1,12 @@
+- name: Use a module from the project's own collection
+  hosts: all
+  gather_facts: false
+  tasks:
+    - name: Greet
+      lamplighter_test.fixtures.hello:
+        name: lamplighter
+      register: greeting
+
+    - name: Check the greeting
+      ansible.builtin.assert:
+        that: greeting.msg == "hello lamplighter"

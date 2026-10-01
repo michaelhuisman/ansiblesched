@@ -132,7 +132,7 @@ def test_sse_format_is_single_data_line() -> None:
 
 
 @pytest.mark.parametrize(
-    ("raw", "expected"), [(None, 0), ("", 0), ("12", 12), ("abc", 0), ("-3", 0)]
+    ("raw", "expected"), [(None, -1), ("", -1), ("0", 0), ("12", 12), ("abc", -1), ("-3", -1)]
 )
 def test_parse_last_event_id(raw: str | None, expected: int) -> None:
     assert parse_last_event_id(raw) == expected

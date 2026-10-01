@@ -123,6 +123,10 @@ services:
     <<: *app
     command: ["worker"]
     stop_grace_period: 60s
+    # One SELinux level for all workers (and `dev`): files one worker writes into the
+    # shared caches stay readable for the others. Ignored without SELinux.
+    security_opt:
+      - label=level:s0:c401,c402
     environment:
       <<: *app-env
       LAMPLIGHTER_OPENBAO_ADDR: http://openbao:8200
@@ -139,6 +143,7 @@ services:
       - ./migrations:/app/migrations:ro
       - runtime:/run/lamplighter
       - repocache:/var/cache/lamplighter/repos
+      - collections:/var/cache/lamplighter/collections
       - fixtures:/fixtures:ro
     depends_on:
       migrate:
@@ -190,11 +195,12 @@ services:
       fixture-repo:
         condition: service_completed_successfully
 
-  # Builds a bare git repo from tests/fixtures/repo in the fixtures volume.
+  # Builds the bare git repos from tests/fixtures in the fixtures volume (repo.git,
+  # collections.git, collections-bad.git; see scripts/build-fixtures.sh).
   fixture-repo:
     <<: *app
     depends_on: {}
-    entrypoint: ["sh", "/src/scripts/build-fixture-repo.sh", "/src/tests/fixtures/repo", "/fixtures/repo.git"]
+    entrypoint: ["sh", "/src/scripts/build-fixtures.sh", "/src/tests/fixtures", "/fixtures"]
     volumes:
       - fixtures:/fixtures
       - ./scripts:/src/scripts:ro
@@ -220,6 +226,8 @@ services:
   dev:
     <<: *app
     profiles: ["tools"]
+    security_opt:
+      - label=level:s0:c401,c402
     user: "0"
     command: ["bash"]
     entrypoint: []
@@ -238,6 +246,7 @@ services:
       - .:/src
       - runtime:/run/lamplighter:ro
       - repocache:/var/cache/lamplighter/repos:ro
+      - collections:/var/cache/lamplighter/collections:ro
       - fixtures:/fixtures:ro
       - ./.dev/secrets:/secrets:ro
 
@@ -246,6 +255,8 @@ volumes:
   fixtures:
   # Shared between workers (flock per project) and read-only with `dev` for the tests.
   repocache:
+  # Installed collections per requirements set, shared between workers (flock per set).
+  collections:
   # tmpfs, shared between workers (and read-only with `dev` for the cleanup tests).
   runtime:
     driver_opts:
