@@ -1,0 +1,4 @@
+{# An icon from _icons.html (which base.html includes once per page). #}
+{% macro icon(name) -%}
+<svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-{{ name }}"/></svg>
+{%- endmacro %}
