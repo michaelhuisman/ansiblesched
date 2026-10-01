@@ -7,6 +7,7 @@ import os
 import re
 import time
 from collections.abc import Iterator
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import httpx
@@ -14,8 +15,17 @@ import pytest
 from sqlalchemy import select
 
 from app.core.db import get_sessionmaker
-from app.models import Notification
-from tests.integration.conftest import API_URL, SECRETS_DIR, Env, LocalUser, login_ui, unique
+from app.models import Notification, Run
+from tests.integration.conftest import (
+    API_URL,
+    SECRETS_DIR,
+    Env,
+    LocalUser,
+    ensure_local_user,
+    login_ui,
+    post,
+    unique,
+)
 
 SINK = os.environ.get("LAMPLIGHTER_IT_WEBHOOK_SINK", "http://127.0.0.1:8080")
 WEBHOOK_SECRET = (SECRETS_DIR / "webhook" / "hmac").read_text().strip()  # in OpenBao
@@ -220,6 +230,7 @@ def test_ui_pages_render(ui: httpx.Client, env: Env) -> None:
     template = env.template("ping.yml")
     run = env.wait(env.launch(template)["id"])
     for path in (
+        "/dashboard",
         "/runs",
         "/templates",
         "/schedules",
@@ -233,7 +244,7 @@ def test_ui_pages_render(ui: httpx.Client, env: Env) -> None:
         assert resp.status_code == 200, path
         assert "<!doctype html>" in resp.text.lower(), path
     assert template["name"] in ui.get("/templates").text
-    assert httpx.get(f"{API_URL}/", follow_redirects=False).headers["location"] == "/ui/runs"
+    assert httpx.get(f"{API_URL}/", follow_redirects=False).headers["location"] == "/ui/dashboard"
 
 
 def test_ui_runs_partial_for_htmx(ui: httpx.Client, env: Env) -> None:
@@ -329,3 +340,50 @@ def test_ui_delete_template_in_use_shows_error(ui: httpx.Client, env: Env) -> No
     resp = ui.post(f"/templates/{template['id']}/delete")
     assert resp.status_code == 409
     assert "in use" in resp.text
+
+
+# --- dashboard ------------------------------------------------------------------------
+
+
+def test_dashboard_shows_failures_and_failing_schedules(env: Env) -> None:
+    template = env.template("fail.yml")
+    schedule = post(
+        env.api,
+        "/schedules",
+        {"template_id": template["id"], "cron": "0 0 1 1 *", "timezone": "UTC"},
+    )
+    with get_sessionmaker()() as s, s.begin():
+        s.add(
+            Run(
+                template_id=template["id"],
+                schedule_id=schedule["id"],
+                scheduled_for=datetime.now(UTC) - timedelta(minutes=5),
+                triggered_by="schedule",
+                status="failed",
+                rc=2,
+                finished_at=datetime.now(UTC),
+            )
+        )
+    me = ensure_local_user(unique("dash"), ["viewer"])
+    ui = login_ui(me.username, me.password)
+    page = ui.get("/dashboard")
+    assert page.status_code == 200
+    text = page.text
+    assert "Runs per hour" in text
+    failing = text.split("Failing schedules", 1)[1].split("Upcoming runs", 1)[0]
+    assert template["name"] in failing
+    upcoming = text.split("Upcoming runs", 1)[1].split("Recent failures", 1)[0]
+    assert template["name"] in upcoming
+    assert "Maintenance" in text
+    # The htmx refresh returns only the panels.
+    partial = ui.get("/dashboard", headers={"HX-Request": "true"}).text
+    assert 'id="dash"' in partial
+    assert "<html" not in partial
+
+
+def test_dashboard_is_the_start_page() -> None:
+    me = ensure_local_user(unique("start"), ["viewer"])
+    ui = login_ui(me.username, me.password)
+    resp = ui.get(f"{API_URL}/ui")
+    assert resp.status_code == 303
+    assert resp.headers["location"] == "/ui/dashboard"

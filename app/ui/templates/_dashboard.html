@@ -1,0 +1,125 @@
+{# Dashboard panels; htmx replaces this whole block every 15s. #}
+{% set bad = (d.totals.get('failed', 0) + d.totals.get('error', 0) + d.totals.get('timeout', 0)) %}
+{% set total = d.totals.values() | sum %}
+<div id="dash" hx-get="/ui/dashboard" hx-trigger="every 15s" hx-swap="outerHTML">
+  <p class="muted dash-updated">Last 24 hours · updated {{ d.now | dt }} UTC</p>
+
+  <div class="tiles">
+    <a class="tile" href="/ui/runs"><span class="tile-label">Runs</span>
+      <span class="tile-value">{{ total }}</span></a>
+    <a class="tile ok" href="/ui/runs?status=successful"><span class="tile-label">Successful</span>
+      <span class="tile-value">{{ d.totals.get('successful', 0) }}</span></a>
+    <a class="tile {% if bad %}bad{% endif %}" href="/ui/runs?status=failed"><span class="tile-label">Failed</span>
+      <span class="tile-value">{{ bad }}</span>
+      <span class="tile-sub">failed, error, timeout</span></a>
+    <div class="tile"><span class="tile-label">Success rate</span>
+      <span class="tile-value">{{ '%.0f%%' % (d.success_rate * 100) if d.success_rate is not none else '–' }}</span></div>
+    <a class="tile {% if d.running %}active{% endif %}" href="/ui/runs?status=running"><span class="tile-label">Running now</span>
+      <span class="tile-value">{{ d.running }}</span></a>
+    <a class="tile" href="/ui/runs?status=queued"><span class="tile-label">Queued</span>
+      <span class="tile-value">{{ d.queued }}</span></a>
+  </div>
+
+  <section class="card flush">
+    <h2>Runs per hour
+      <span class="legend">
+        <span><i class="sw bar-ok"></i>successful</span><span><i class="sw bar-bad"></i>failed</span>
+        <span><i class="sw bar-other"></i>canceled / skipped</span><span><i class="sw bar-active"></i>queued / running</span>
+      </span></h2>
+    {% set top = d.max_per_hour if d.max_per_hour > 0 else 1 %}
+    {% set w, h, gap = 24, 140, 6 %}
+    <div class="chart">
+      <svg viewBox="0 0 {{ d.hours | length * (w + gap) }} {{ h + 22 }}"
+           role="img" aria-label="Runs per hour over the last 24 hours">
+        <line class="axis" x1="0" y1="{{ h }}" x2="{{ d.hours | length * (w + gap) }}" y2="{{ h }}"/>
+        {% for b in d.hours %}
+          {% set x = loop.index0 * (w + gap) + gap / 2 %}
+          {% set ns = namespace(y=h) %}
+          <g>
+            <title>{{ b.start.strftime('%H:00') }} UTC: {{ b.total }} runs ({{ b.counts.ok }} successful, {{ b.counts.bad }} failed, {{ b.counts.other }} canceled/skipped, {{ b.counts.active }} queued/running)</title>
+            <rect class="bar-hit" x="{{ x }}" y="0" width="{{ w }}" height="{{ h }}"/>
+            {% for group in ['ok', 'bad', 'other', 'active'] %}
+              {% set bh = (b.counts[group] / top * (h - 8)) %}
+              {% if bh > 0 %}
+                {% set ns.y = ns.y - bh %}
+                <rect class="bar-{{ group }}" x="{{ x }}" y="{{ ns.y }}" width="{{ w }}" height="{{ bh }}"/>
+              {% endif %}
+            {% endfor %}
+            {% if loop.index0 % 6 == 0 or loop.last %}
+              <text x="{{ x + w / 2 }}" y="{{ h + 16 }}" text-anchor="middle">{{ b.start.strftime('%H:00') }}</text>
+            {% endif %}
+          </g>
+        {% endfor %}
+      </svg>
+      {% if not total %}<p class="chart-empty muted">No runs in the last 24 hours.</p>{% endif %}
+    </div>
+  </section>
+
+  <div class="dash-grid">
+    <section class="card flush">
+      <h2>Failing schedules</h2>
+      {% if d.failing %}
+      <table class="grid compact">
+        <thead><tr><th>Template</th><th>Cron</th><th>Last run</th><th>When (UTC)</th></tr></thead>
+        <tbody>
+        {% for f in d.failing %}
+          <tr><td class="nowrap">{{ f.template }}</td><td class="mono">{{ f.cron }}</td>
+            <td><a href="/ui/runs/{{ f.last.run_id }}">{{ f.last.run_id }}</a>
+              {% with status=f.last.status %}{% include "_status.html" %}{% endwith %}</td>
+            <td class="mono">{{ f.last.at | dt }}</td></tr>
+        {% endfor %}
+        </tbody>
+      </table>
+      {% else %}<p class="empty-note">All schedules succeeded on their last run.</p>{% endif %}
+    </section>
+
+    <section class="card flush">
+      <h2>Upcoming runs</h2>
+      {% if d.upcoming %}
+      <table class="grid compact">
+        <thead><tr><th>Template</th><th>Cron</th><th>Next (UTC)</th></tr></thead>
+        <tbody>
+        {% for u in d.upcoming %}
+          <tr><td class="nowrap">{{ u.template }}</td><td class="mono">{{ u.cron }}</td><td class="mono">{{ u.at | dt }}</td></tr>
+        {% endfor %}
+        </tbody>
+      </table>
+      {% else %}<p class="empty-note">No enabled schedules.</p>{% endif %}
+    </section>
+
+    <section class="card flush">
+      <h2>Recent failures</h2>
+      {% if d.recent_failures %}
+      <table class="grid compact">
+        <thead><tr><th>#</th><th>Template</th><th>Status</th><th>Finished (UTC)</th></tr></thead>
+        <tbody>
+        {% for r in d.recent_failures %}
+          <tr><td><a href="/ui/runs/{{ r.run_id }}">{{ r.run_id }}</a></td><td class="nowrap">{{ r.template }}</td>
+            <td>{% with status=r.status %}{% include "_status.html" %}{% endwith %}</td>
+            <td class="mono">{{ r.at | dt }}</td></tr>
+        {% endfor %}
+        </tbody>
+      </table>
+      {% else %}<p class="empty-note">No failed runs.</p>{% endif %}
+    </section>
+
+    <section class="card flush">
+      <h2>Maintenance</h2>
+      <table class="grid compact">
+        <thead><tr><th>Task</th><th>State</th><th>Last success (UTC)</th></tr></thead>
+        <tbody>
+        {% for m in d.maintenance %}
+          <tr><td>{{ m.task | capitalize }}</td>
+            <td>
+              {% if not m.configured %}<span class="badge status-skipped">not run yet</span>
+              {% elif m.last_failed %}<span class="badge status-failed" title="{{ m.last_error or '' }}">last attempt failed</span>
+              {% elif m.stale %}<span class="badge status-timeout">overdue</span>
+              {% else %}<span class="badge status-successful">ok</span>{% endif %}
+            </td>
+            <td class="mono">{{ m.last_success_at | dt if m.last_success_at else '–' }}</td></tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </section>
+  </div>
+</div>

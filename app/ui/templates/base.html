@@ -25,16 +25,18 @@
   {% if user.can(Action.MANAGE_USERS) %}
     {% set nav = nav + [('Administration', [('users', 'Users'), ('audit', 'Audit')])] %}
   {% endif %}
-  {% set labels = {'account': 'Account'} %}
+  {% set labels = {'account': 'Account', 'dashboard': 'Dashboard'} %}
   {% for _, items in nav %}{% for slug, label in items %}{% set _ = labels.update({slug: label}) %}{% endfor %}{% endfor %}
 
   <div class="shell">
     <aside class="sidebar" id="sidebar" aria-label="Main navigation">
-      <a class="side-brand" href="/ui/runs" title="lamplighter">
+      <a class="side-brand" href="/ui/dashboard" title="lamplighter">
         <img class="side-badge" src="{{ static('brand/badge.svg') }}" alt="">
         <img class="side-wordmark" src="{{ static('brand/logo-dark.svg') }}" alt="lamplighter">
       </a>
       <nav>
+        <a class="nav-top" href="/ui/dashboard" title="Dashboard" {% if section == 'dashboard' %}aria-current="page"{% endif %}>
+          {{ icon('dashboard') }}<span class="nav-label">Dashboard</span></a>
         {% for group, items in nav %}
           <div class="nav-group">{{ group }}</div>
           {% for slug, label in items %}
@@ -54,7 +56,7 @@
           {{ icon('menu') }}</button>
         <nav class="breadcrumb" aria-label="Breadcrumb">
           {% block breadcrumb %}
-          <a href="/ui/runs">Home</a>
+          <a href="/ui/dashboard">Home</a>
           {% if section in labels %}
             <span class="sep">/</span>
             {% if segs | length > 2 %}<a href="/ui/{{ section }}">{{ labels[section] }}</a>

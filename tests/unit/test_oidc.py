@@ -2,6 +2,7 @@ import base64
 import hashlib
 import time
 from typing import Any
+from urllib.parse import parse_qs, urlsplit
 
 import jwt
 import pytest
@@ -139,12 +140,33 @@ def test_authorize_url(client: OidcClient) -> None:
     [
         ("/ui/templates", "/ui/templates"),
         ("/ui/runs?status=failed", "/ui/runs?status=failed"),
-        (None, "/ui/runs"),
-        ("https://evil.example/ui", "/ui/runs"),
-        ("//evil.example/ui", "/ui/runs"),
-        ("/api/v1/users", "/ui/runs"),
-        ("/ui\\@evil.example", "/ui/runs"),
+        (None, "/ui/dashboard"),
+        ("https://evil.example/ui", "/ui/dashboard"),
+        ("//evil.example/ui", "/ui/dashboard"),
+        ("/api/v1/users", "/ui/dashboard"),
+        ("/ui\\@evil.example", "/ui/dashboard"),
     ],
 )
 def test_safe_next(value: str | None, expected: str) -> None:
     assert safe_next(value) == expected
+
+
+def test_logout_url(client: OidcClient) -> None:
+    client._metadata["end_session_endpoint"] = f"{ISSUER}/logout"
+    back = "https://ll.example.org/ui/login?signed_out=1"
+    with_hint = client.logout_url(id_token="ID.TOKEN.X", post_logout_redirect_uri=back)
+    assert with_hint is not None
+    params = parse_qs(urlsplit(with_hint).query)
+    assert with_hint.startswith(f"{ISSUER}/logout?")
+    assert params == {
+        "client_id": [CLIENT],
+        "post_logout_redirect_uri": [back],
+        "id_token_hint": ["ID.TOKEN.X"],
+    }
+    without = client.logout_url(id_token=None, post_logout_redirect_uri=back)
+    assert without is not None
+    assert "id_token_hint" not in parse_qs(urlsplit(without).query)
+
+
+def test_logout_url_without_end_session_endpoint(client: OidcClient) -> None:
+    assert client.logout_url(id_token="x", post_logout_redirect_uri="https://x/ui/login") is None

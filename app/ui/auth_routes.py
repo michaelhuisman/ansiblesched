@@ -33,7 +33,13 @@ router = APIRouter(prefix="/ui", include_in_schema=False)
 
 OIDC_COOKIE = "lamplighter_oidc"
 OIDC_COOKIE_MAX_AGE = 600
-DEFAULT_NEXT = "/ui/runs"
+# The id_token, only as id_token_hint for the logout at the IdP: a cookie (not the database),
+# sent only to /ui/logout. Larger tokens are skipped (cookie limit); the IdP then asks.
+ID_TOKEN_COOKIE = "lamplighter_idt"  # noqa: S105 - a cookie name, not a secret
+ID_TOKEN_COOKIE_PATH = "/ui/logout"  # noqa: S105 - a path
+ID_TOKEN_MAX_LEN = 3500
+SIGNED_OUT = "/ui/login?signed_out=1"
+DEFAULT_NEXT = "/ui/dashboard"
 
 LOGIN_FAILED = "Invalid username or password, or the account is (temporarily) locked."
 PASSWORDS_DIFFER = "The passwords do not match."
@@ -66,13 +72,19 @@ def _redirect_uri(settings: Settings) -> str:
 
 
 @router.get("/login", response_class=HTMLResponse)
-async def login_page(request: Request, next: Annotated[str | None, Query()] = None) -> Response:
+async def login_page(
+    request: Request,
+    next: Annotated[str | None, Query()] = None,
+    signed_out: Annotated[bool, Query()] = False,
+) -> Response:
     try:
         if await authenticate(request) is not None:
             return redirect(safe_next(next))
     except (NotAuthenticatedError, PermissionDeniedError):
         pass  # invalid token or session: just show the login screen
-    return render(request, "login.html", None, next=safe_next(next), error=None)
+    return render(
+        request, "login.html", None, next=safe_next(next), error=None, signed_out=signed_out
+    )
 
 
 @router.post("/login", response_class=HTMLResponse)
@@ -115,13 +127,24 @@ def login_submit(
 
 @router.post("/logout", response_class=HTMLResponse)
 def logout(request: Request, session: SessionDep, user: UserDep) -> Response:
+    """Ends the lamplighter session; for OIDC users also the session at the IdP, so the
+    next "Sign in with Keycloak" asks for credentials again."""
     raw = request.cookies.get(SESSION_COOKIE)
     if raw:
         sessions.destroy(session, raw)
-    audit.record(session, actor(request, user), "logout")
+    idp_logout = None
+    client = get_oidc_client()
+    if user.source == "oidc" and client is not None:
+        settings = get_settings()
+        idp_logout = client.logout_url(
+            id_token=request.cookies.get(ID_TOKEN_COOKIE),
+            post_logout_redirect_uri=f"{settings.public_url.rstrip('/')}{SIGNED_OUT}",
+        )
+    audit.record(session, actor(request, user), "logout", details={"idp": idp_logout is not None})
     session.commit()
-    response = redirect("/ui/login")
+    response = redirect(idp_logout or SIGNED_OUT)
     response.delete_cookie(SESSION_COOKIE, path="/")
+    response.delete_cookie(ID_TOKEN_COOKIE, path=ID_TOKEN_COOKIE_PATH)
     return response
 
 
@@ -244,6 +267,16 @@ def oidc_callback(
     response = redirect(safe_next(saved.get("next")))
     _set_session_cookie(response, new.raw_token, settings)
     response.delete_cookie(OIDC_COOKIE, path="/ui/auth")
+    if len(tokens["id_token"]) <= ID_TOKEN_MAX_LEN:
+        response.set_cookie(
+            ID_TOKEN_COOKIE,
+            tokens["id_token"],
+            max_age=settings.session_max_s,
+            httponly=True,
+            secure=settings.session_cookie_secure,
+            samesite="lax",
+            path=ID_TOKEN_COOKIE_PATH,
+        )
     return response
 
 

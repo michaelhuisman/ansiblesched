@@ -200,6 +200,8 @@ textarea { width: 100%; resize: vertical; }
 .form .row { display: flex; gap: 16px; flex-wrap: wrap; }
 .form-actions { display: flex; justify-content: flex-end; }
 .field-error, .error, .row-error { color: var(--danger); font-weight: 400; font-size: 13px; }
+p.info { background: rgba(76, 194, 127, .12); border: 1px solid rgba(76, 194, 127, .35);
+  color: var(--text); padding: 8px 12px; border-radius: 4px; }
 p.error { background: rgba(239, 107, 107, .12); border: 1px solid rgba(239, 107, 107, .35);
   padding: 8px 12px; border-radius: 4px; }
 
@@ -264,3 +266,51 @@ fieldset.choice label.check { flex: 0 0 auto; }
 /* --- logo (login page) --------------------------------------------------------------- */
 .login-logo { display: flex; justify-content: center; margin-bottom: 24px; }
 .login-logo-img { height: 72px; width: auto; max-width: 100%; }
+
+/* --- dashboard ----------------------------------------------------------------------- */
+.sidebar nav a.nav-top { margin-top: 10px; }
+.dash-updated { margin: -8px 0 14px; font-size: 13px; }
+.tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 12px;
+  margin-bottom: 16px; }
+.tile { display: flex; flex-direction: column; gap: 2px; padding: 14px 16px; background: var(--surface);
+  border: 1px solid var(--border); border-left: 3px solid var(--border); border-radius: 6px;
+  color: var(--text); }
+a.tile:hover { text-decoration: none; background: var(--accent-soft); }
+.tile-label { font-size: 11.5px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase;
+  color: var(--muted); }
+.tile-value { font-size: 28px; font-weight: 600; line-height: 1.2; font-variant-numeric: tabular-nums; }
+.tile-sub { font-size: 12px; color: var(--muted); }
+.tile.ok { border-left-color: var(--ok); }
+.tile.bad { border-left-color: var(--danger); }
+.tile.bad .tile-value { color: var(--danger); }
+.tile.active { border-left-color: var(--accent); }
+
+/* Cards whose content (a table, a chart) runs to the edge. */
+.card.flush { padding: 0; overflow: hidden; }
+.card.flush > h2:first-child { margin: 0; border-radius: 0; display: flex; align-items: center;
+  justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.card.flush table.grid { border: 0; border-radius: 0; }
+.empty-note { margin: 0; padding: 16px 20px; color: var(--muted); }
+.dash-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(420px, 1fr)); gap: 0 16px; }
+@media (max-width: 900px) { .dash-grid { grid-template-columns: 1fr; } }
+
+.legend { display: flex; gap: 14px; flex-wrap: wrap; font-size: 12px; font-weight: 400; color: var(--muted); }
+.legend span { display: inline-flex; align-items: center; gap: 6px; }
+.sw { display: inline-block; width: 10px; height: 10px; border-radius: 2px; }
+.chart { position: relative; padding: 16px 20px 8px; }
+.chart svg { display: block; width: 100%; height: auto; max-height: 240px; overflow: visible; }
+.chart text { font: 8px var(--mono); fill: var(--muted); }
+.chart .axis { stroke: var(--border); stroke-width: 1; }
+.chart .bar-hit { fill: transparent; }
+.chart g:hover .bar-hit { fill: var(--accent-soft); }
+.bar-ok { fill: var(--ok); background: var(--ok); }
+.bar-bad { fill: var(--danger); background: var(--danger); }
+.bar-other { fill: var(--muted); background: var(--muted); opacity: .55; }
+.bar-active { fill: var(--accent); background: var(--accent); }
+.chart-empty { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+  margin: 0; }
+@media (max-width: 900px) {
+  /* Readable bars and labels on a phone: the chart scrolls sideways. */
+  .chart { overflow-x: auto; }
+  .chart svg { min-width: 600px; }
+}
