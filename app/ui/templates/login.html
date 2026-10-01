@@ -4,6 +4,7 @@
 <div class="login">
   <div class="login-logo">{% with logo_class='login-logo-img' %}{% include "_logo.html" %}{% endwith %}</div>
   <h1>Sign in</h1>
+  {% if signed_out and not error %}<p class="info">You have been signed out.</p>{% endif %}
   {% if error %}<p class="error">{{ error }}</p>{% endif %}
   {% if local_login %}
   <form class="card form" method="post" action="/ui/login">

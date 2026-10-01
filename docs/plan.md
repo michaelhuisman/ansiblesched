@@ -558,6 +558,22 @@ pinned to a commit SHA:
 - **Tests:** a self-built test collection (`tests/fixtures/collection-src`) in a fixture
   repo as a local tarball, so the integration tests need no Galaxy access.
 
+## Logout at Keycloak and the dashboard
+
+- **RP-initiated logout:** "Sign out" of an OIDC user also ends the session at Keycloak,
+  via the `end_session_endpoint` from discovery with `id_token_hint` and
+  `post_logout_redirect_uri` = `<public_url>/ui/login?signed_out=1`. The id_token is kept
+  in its own cookie (`lamplighter_idt`: HttpOnly, Secure, SameSite=Lax, path
+  `/ui/logout`), not in the database. Without that cookie the logout goes via
+  `client_id` and Keycloak asks for confirmation; without an `end_session_endpoint` only
+  the local session ends. Keycloak's "Valid post logout redirect URIs" must contain
+  `<public_url>/ui/login*`.
+- **Dashboard** (`/ui/dashboard`, the start page; `app/services/dashboard.py`): tiles for
+  the last 24 hours (runs, successful, failed, success rate, running, queued), runs per
+  hour as a stacked server-rendered SVG, failing schedules (last finished run not
+  successful), the next 5 scheduled runs, the last 10 failures and the maintenance status
+  (backup and retention; overdue after 26 hours). Refreshes every 15s via htmx.
+
 ## Phase 6 — Kubernetes (Helm)
 
 **Scope:** a Helm chart as an alternative to Docker Compose: deployments for api,
@@ -574,9 +590,6 @@ Postgres external or via an operator.
 - **SSE scales per thread:** every open stream occupies a thread from the thread pool and
   polls the database. That is fine for dev and small scale. With more viewers:
   `LISTEN/NOTIFY` on new events or an async generator (phase 5).
-- **Logging out of Keycloak:** the UI only removes its own session. The SSO session in
-  Keycloak remains, so "Sign in with Keycloak" signs straight back in. Fix: RP-initiated
-  logout via the `end_session_endpoint` with `id_token_hint`.
 - **Role changes in Keycloak** only take effect at the next login: the session keeps a
   snapshot, which stays valid for at most 24 hours. Bearer tokens follow immediately,
   because they only live for 5 minutes.
@@ -589,8 +602,6 @@ Postgres external or via an operator.
 - **UI on narrow screens:** since the sidebar layout the menu slides in and wide tables
   scroll inside the content area, but the tables themselves are still made for desktop
   (no stacked card view on a phone).
-- **Dashboard:** a start page like Dependency-Track's (runs of the last 24 hours per
-  status, queue, failing schedules, backup status) was deferred; Runs is the start page.
 - **Remote processes on cancel/timeout:** ansible-runner stops the local ansible process;
   a running command on the target (e.g. `sleep`) keeps running there.
 - **AppRole secret ids** are stored as an env file on the host (0600, root). Better:

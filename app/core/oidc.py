@@ -146,6 +146,21 @@ class OidcClient:
         }
         return f"{self.metadata()['authorization_endpoint']}?{urlencode(params)}"
 
+    def logout_url(self, *, id_token: str | None, post_logout_redirect_uri: str) -> str | None:
+        """RP-initiated logout at the IdP (ends the Keycloak session too). With the id_token
+        as hint the IdP logs out without asking; without it, it may ask for confirmation.
+        None if the IdP has no end_session_endpoint or is unreachable."""
+        try:
+            endpoint = self.metadata().get("end_session_endpoint")
+        except httpx.HTTPError:
+            return None
+        if not isinstance(endpoint, str) or not endpoint:
+            return None
+        params = {"client_id": self.client_id, "post_logout_redirect_uri": post_logout_redirect_uri}
+        if id_token:
+            params["id_token_hint"] = id_token
+        return f"{endpoint}?{urlencode(params)}"
+
     def exchange_code(self, *, code: str, redirect_uri: str, verifier: str) -> dict[str, Any]:
         resp = httpx.post(
             self.metadata()["token_endpoint"],

@@ -25,7 +25,7 @@
       "webOrigins": ["http://localhost:8000"],
       "attributes": {
         "pkce.code.challenge.method": "S256",
-        "post.logout.redirect.uris": "http://localhost:8000/ui/login"
+        "post.logout.redirect.uris": "http://localhost:8000/ui/login*"
       },
       "protocolMappers": [
         {

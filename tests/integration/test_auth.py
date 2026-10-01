@@ -470,7 +470,7 @@ def test_ui_change_own_password(env: Env) -> None:
     assert login_ui(me.username, "x" * 12).get("/runs").status_code == 200
 
 
-# --- OIDC: volledige browserflow (authorization code + PKCE) -----------------------------
+# --- OIDC: full browser flow (authorization code + PKCE) ---------------------------------
 
 
 def _internal(url: str) -> str:
@@ -520,3 +520,49 @@ def test_oidc_callback_rejects_bad_state() -> None:
     resp = c.get(f"{API_URL}/ui/auth/callback", params={"code": "x", "state": "forged"})
     assert resp.status_code == 401
     assert "lamplighter_session" not in c.cookies
+
+
+def _csrf(client: httpx.Client) -> str:
+    page = client.get(f"{API_URL}/ui/runs").text
+    match = re.search(r'name="csrf_token" value="([^"]+)"', page)
+    assert match, "no CSRF token on the page"
+    return match.group(1)
+
+
+def test_oidc_logout_ends_the_keycloak_session_too() -> None:
+    resp = oidc_browser_login("kc-operator")
+    client: httpx.Client = resp.extensions["client"]
+    assert "lamplighter_idt" in client.cookies
+
+    out = client.post(f"{API_URL}/ui/logout", data={"csrf_token": _csrf(client)})
+    assert out.status_code == 303
+    location = out.headers["location"]
+    assert "/protocol/openid-connect/logout?" in location
+    assert "id_token_hint=" in location
+    assert (
+        "post_logout_redirect_uri=http%3A%2F%2Flocalhost%3A8000%2Fui%2Flogin%3Fsigned_out%3D1"
+        in location
+    )
+    assert "lamplighter_session" not in client.cookies
+    assert "lamplighter_idt" not in client.cookies
+
+    # With the hint Keycloak logs out without asking and sends us back to the login page.
+    back = client.get(_internal(location))
+    assert back.status_code == 302, back.text[:300]
+    assert back.headers["location"].endswith("/ui/login?signed_out=1")
+    assert "You have been signed out" in client.get(_internal(back.headers["location"])).text
+
+    # The Keycloak session is gone: signing in again shows Keycloak's login form.
+    start = client.get(f"{API_URL}/ui/auth/oidc/start")
+    again = client.get(_internal(start.headers["location"]))
+    assert again.status_code == 200
+    assert 'id="kc-form-login"' in again.text
+
+
+def test_local_logout_stays_local() -> None:
+    me = ensure_local_user(unique("logout"), ["viewer"])
+    client = login_ui(me.username, me.password)
+    assert "lamplighter_idt" not in client.cookies
+    out = client.post("/logout")
+    assert out.status_code == 303
+    assert out.headers["location"] == "/ui/login?signed_out=1"

@@ -58,7 +58,7 @@ async def _permission_denied(request: Request, exc: Exception) -> Response:
             '<!doctype html><html lang="en"><title>Access denied</title>'
             '<link rel="stylesheet" href="/ui/static/app.css">'
             '<main><h1>Access denied</h1><p class="muted">You do not have the required role.</p>'
-            '<p><a href="/ui/runs">Back</a></p></main>',
+            '<p><a href="/ui/dashboard">Back</a></p></main>',
             status_code=status.HTTP_403_FORBIDDEN,
         )
     return JSONResponse(status_code=status.HTTP_403_FORBIDDEN, content={"detail": str(exc)})
@@ -84,7 +84,7 @@ def create_app() -> FastAPI:
 
     @app.get("/", include_in_schema=False)
     def root() -> RedirectResponse:
-        return RedirectResponse("/ui/runs")
+        return RedirectResponse("/ui/dashboard")
 
     @app.get("/metrics", include_in_schema=False)
     def metrics(request: Request) -> Response:

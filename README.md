@@ -128,6 +128,9 @@ Where secrets live:
 Create a confidential client `lamplighter` with the standard flow and PKCE (S256), the
 redirect URI `https://<your-host>/ui/auth/callback`, and client roles `viewer`, `operator`
 and `admin`. Map the client to the `aud` claim of access tokens with an audience mapper.
+Set "Valid post logout redirect URIs" to `https://<your-host>/ui/login*`: "Sign out" in
+lamplighter then also ends the Keycloak session, and Keycloak sends you back to the login
+page.
 
 ### 3. Configure the deployment
 

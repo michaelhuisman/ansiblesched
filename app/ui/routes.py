@@ -18,7 +18,7 @@ from app.core.auth import Principal
 from app.models import Credential, Inventory, Project, Schedule, Template
 from app.models.run import RunStatus
 from app.scheduler.trigger import build_trigger, next_fire_time
-from app.services import crud, runs, schedules
+from app.services import crud, dashboard, runs, schedules
 from app.services.errors import ServiceError
 from app.ui.common import (
     CanCancel,
@@ -42,7 +42,15 @@ router = APIRouter(prefix="/ui", include_in_schema=False)
 
 @router.get("", response_class=HTMLResponse)
 def index() -> Response:
-    return redirect("/ui/runs")
+    return redirect("/ui/dashboard")
+
+
+@router.get("/dashboard", response_class=HTMLResponse)
+def dashboard_page(request: Request, session: SessionDep, user: CanRead) -> HTMLResponse:
+    data = dashboard.build(session)
+    # htmx refreshes only the panels.
+    partial = request.headers.get("HX-Request") == "true"
+    return render(request, "_dashboard.html" if partial else "dashboard.html", user, d=data)
 
 
 @router.get("/runs", response_class=HTMLResponse)
